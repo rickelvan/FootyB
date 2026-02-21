@@ -323,7 +323,7 @@ function formatSelection(pred) {
   if(!pred) return '—';
   if(pred.market_type==='1X2') return {home:'Home Win',draw:'Draw',away:'Away Win'}[pred.selection_value]||pred.selection_value;
   if(pred.market_type==='GOALS') return pred.selection_value.replace('over_','Over ').replace('under_','Under ');
-  if(pred.market_type==='SCORE') return `Score: ${pred.selection_value}`;
+  if(pred.market_type==='SCORE') { const[s1,s2]=pred.selection_value.split('-'); return `Score: ${s1} – ${s2}`; }
   return pred.selection_value;
 }
 
@@ -546,6 +546,16 @@ async function createAdminAccount() {
   } catch(e) {
     alertEl.innerHTML=`<div class="alert alert-error">Failed: ${e.message}</div>`;
   } finally { setLoading('setup-btn',false); }
+}
+
+// ── SLIP ACCORDION ──────────────────────────────────────
+function toggleSlip(slipId) {
+  const body = document.getElementById('slip-body-'+slipId);
+  const arrow = document.getElementById('arrow-'+slipId);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  if (arrow) arrow.style.transform = isOpen ? '' : 'rotate(90deg)';
 }
 
 // ── LOGOUT ───────────────────────────────────────────────
@@ -802,34 +812,43 @@ async function renderMySlips(container) {
       const gw=slip.gameweeks; if(!gw) return '';
       const scored=gw.status==='scored';
       const preds=slip.predictions||[];
-      return `<div class="card">
-        <div class="card-header">
-          <span class="card-title" style="font-size:16px;">${gw.name}</span>
+      const slipId = slip.id;
+      return `<div class="card slip-card" style="cursor:pointer;">
+        <div class="card-header" onclick="toggleSlip('${slipId}')" style="margin-bottom:0;user-select:none;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="color:var(--muted);font-size:13px;transition:transform .2s;" id="arrow-${slipId}">▶</span>
+            <span class="card-title" style="font-size:16px;">${gw.name}</span>
+          </div>
           <div style="display:flex;gap:8px;align-items:center;">
             ${scored?`<span class="pts-pill ${slip.points_total>=10?'pts-10':'pts-3'}">${slip.points_total} pts</span>`:''}
             <span class="badge badge-${gw.status==='open'?'open':gw.status==='closed'?'closed':'scored'}">${gw.status}</span>
           </div>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Submitted: ${fmtDate(slip.submitted_at)}</div>
-        ${preds.map(pred=>{
-          const f=pred.fixtures; if(!f) return '';
-          const rc=!scored?'pred-pending':pred.points_awarded>0?'pred-correct':'pred-wrong';
-          const pts=!scored?`<span class="pts-pill pts-pending">—</span>`
-            :pred.points_awarded>=10?`<span class="pts-pill pts-10">+${pred.points_awarded}</span>`
-            :pred.points_awarded>0?`<span class="pts-pill pts-3">+${pred.points_awarded}</span>`
-            :`<span class="pts-pill pts-0">0</span>`;
-          return `<div class="fixture-card ${rc}" style="padding:10px 14px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-              <div>
-                <div style="font-weight:600;font-size:13px;">${f.home_team} <span style="color:var(--muted);font-weight:400;">vs</span> ${f.away_team}</div>
-                <div style="font-size:12px;color:var(--muted);margin-top:2px;">
-                  Pick: <strong style="color:var(--text);">${formatSelection(pred)}</strong>
-                  ${scored&&f.result_entered?`&nbsp;·&nbsp;Result: <span class="score-result">${f.final_home_goals}–${f.final_away_goals}</span>`:''}
-                </div>
-              </div>${pts}
-            </div>
-          </div>`;
-        }).join('')}
+        <div id="slip-body-${slipId}" style="display:none;margin-top:14px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Submitted: ${fmtDate(slip.submitted_at)}</div>
+          ${preds.map(pred=>{
+            const f=pred.fixtures; if(!f) return '';
+            // Color based purely on points_awarded (not pred.scored which may lag)
+            const isCorrect = scored && pred.points_awarded > 0;
+            const isWrong = scored && pred.points_awarded === 0;
+            const rc=!scored?'pred-pending':isCorrect?'pred-correct':'pred-wrong';
+            const pts=!scored?`<span class="pts-pill pts-pending">—</span>`
+              :pred.points_awarded>=10?`<span class="pts-pill pts-10">+${pred.points_awarded}</span>`
+              :pred.points_awarded>0?`<span class="pts-pill pts-3">+${pred.points_awarded}</span>`
+              :`<span class="pts-pill pts-0">0</span>`;
+            return `<div class="fixture-card ${rc}" style="padding:10px 14px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                <div>
+                  <div style="font-weight:600;font-size:13px;">${f.home_team} <span style="color:var(--muted);font-weight:400;">vs</span> ${f.away_team}</div>
+                  <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+                    Pick: <strong style="color:var(--text);">${formatSelection(pred)}</strong>
+                    ${scored&&f.result_entered?`&nbsp;·&nbsp;Result: <span class="score-result">${f.final_home_goals}–${f.final_away_goals}</span>`:''}
+                  </div>
+                </div>${pts}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
       </div>`;
     }).join('');
   } catch(e){ container.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
