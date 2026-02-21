@@ -828,13 +828,17 @@ async function renderMySlips(container) {
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Submitted: ${fmtDate(slip.submitted_at)}</div>
           ${preds.map(pred=>{
             const f=pred.fixtures; if(!f) return '';
-            // Color based purely on points_awarded (not pred.scored which may lag)
-            const isCorrect = scored && pred.points_awarded > 0;
-            const isWrong = scored && pred.points_awarded === 0;
+            // Recalculate correctness client-side from fixture result
+            // This ensures display is always accurate even if DB scoring is stale
+            let livePoints = pred.points_awarded;
+            if(scored && f.result_entered) {
+              livePoints = calcPoints(pred, f);
+            }
+            const isCorrect = scored && livePoints > 0;
             const rc=!scored?'pred-pending':isCorrect?'pred-correct':'pred-wrong';
             const pts=!scored?`<span class="pts-pill pts-pending">—</span>`
-              :pred.points_awarded>=10?`<span class="pts-pill pts-10">+${pred.points_awarded}</span>`
-              :pred.points_awarded>0?`<span class="pts-pill pts-3">+${pred.points_awarded}</span>`
+              :livePoints>=10?`<span class="pts-pill pts-10">+${livePoints}</span>`
+              :livePoints>0?`<span class="pts-pill pts-3">+${livePoints}</span>`
               :`<span class="pts-pill pts-0">0</span>`;
             return `<div class="fixture-card ${rc}" style="padding:10px 14px;">
               <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
@@ -1146,10 +1150,21 @@ async function adminScoreWeek(gwId){
   finally{ setLoading('sw-'+gwId,false); }
 }
 function calcPoints(pred,fx){
-  const hg=fx.final_home_goals, ag=fx.final_away_goals, total=hg+ag;
-  if(pred.market_type==='1X2'){ const actual=hg>ag?'home':ag>hg?'away':'draw'; return pred.selection_value===actual?3:0; }
-  if(pred.market_type==='GOALS'){ const[dir,thresh]=pred.selection_value.split('_'); const t=parseFloat(thresh); return(dir==='over'?total>t:total<t)?3:0; }
-  if(pred.market_type==='SCORE'){ const[ph,pa]=pred.selection_value.split('-').map(Number); return ph===hg&&pa===ag?10:0; }
+  // Force integers — Supabase can return strings depending on query type
+  const hg=parseInt(fx.final_home_goals), ag=parseInt(fx.final_away_goals), total=hg+ag;
+  if(pred.market_type==='1X2'){
+    const actual=hg>ag?'home':ag>hg?'away':'draw';
+    return pred.selection_value===actual?3:0;
+  }
+  if(pred.market_type==='GOALS'){
+    const[dir,thresh]=pred.selection_value.split('_');
+    const t=parseFloat(thresh);
+    return(dir==='over'?total>t:total<t)?3:0;
+  }
+  if(pred.market_type==='SCORE'){
+    const[ph,pa]=pred.selection_value.split('-').map(Number);
+    return ph===hg&&pa===ag?10:0;
+  }
   return 0;
 }
 
