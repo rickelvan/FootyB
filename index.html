@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TurfPredict</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --pitch:#1a2e1a;--turf:#2d5a27;--lime:#b5e550;--amber:#f5a623;
+    --red:#e63946;--muted:#8a9a8a;--surface:#1e2b1e;
+    --card:#243324;--border:#2e452e;--text:#e8ede8;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;background:var(--pitch);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;}
+  /* TOPBAR */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;gap:12px;height:56px;position:sticky;top:0;z-index:100;}
+  .logo{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;color:var(--lime);flex:1;}
+  .logo span{color:var(--amber);}
+  .topbar-user{font-size:12px;color:var(--muted);}
+  .topbar-user strong{color:var(--text);}
+  /* BUTTONS */
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;}
+  .btn-lime{background:var(--lime);color:#111;}.btn-lime:hover{background:#c8f060;}
+  .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text);}.btn-outline:hover{border-color:var(--lime);color:var(--lime);}
+  .btn-ghost{background:transparent;color:var(--muted);border:none;}.btn-ghost:hover{color:var(--text);}
+  .btn-amber{background:var(--amber);color:#111;}.btn-amber:hover{filter:brightness(1.1);}
+  .btn-danger{background:var(--red);color:#fff;}.btn-danger:hover{filter:brightness(1.1);}
+  .btn-sm{padding:4px 10px;font-size:12px;}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  /* NAV */
+  .nav-tabs{display:flex;overflow-x:auto;gap:2px;background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;}
+  .nav-tab{padding:12px 16px;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:all .15s;background:none;border-top:none;border-left:none;border-right:none;font-family:'DM Sans',sans-serif;}
+  .nav-tab:hover{color:var(--text);}
+  .nav-tab.active{color:var(--lime);border-bottom-color:var(--lime);}
+  .main{flex:1;padding:20px 16px;max-width:860px;margin:0 auto;width:100%;}
+  /* CARDS */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px;}
+  .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .card-title{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--lime);}
+  .section-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;margin-bottom:16px;color:var(--lime);}
+  /* BADGE */
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  .badge-open{background:#1a3d1a;color:var(--lime);border:1px solid #2d6b2d;}
+  .badge-closed{background:#3d2a1a;color:var(--amber);border:1px solid #6b4a1a;}
+  .badge-scored{background:#1a2d3d;color:#6bb8ff;border:1px solid #1a4d6b;}
+  .badge-pending{background:#2a2a2a;color:var(--muted);border:1px solid #444;}
+  .badge-admin{background:#3d1a1a;color:#ff8a8a;border:1px solid #6b1a1a;}
+  /* FORMS */
+  .form-group{margin-bottom:14px;}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;}
+  input,select,textarea{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:9px 12px;font-family:'DM Sans',sans-serif;font-size:14px;transition:border-color .15s;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--lime);}
+  input[type=checkbox]{width:auto;}
+  select option{background:var(--surface);}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:500px){.form-row{grid-template-columns:1fr;}}
+  /* CHECKBOX ROW */
+  .check-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+  .check-row input{width:16px;height:16px;accent-color:var(--lime);}
+  .check-row label{margin:0;text-transform:none;font-size:13px;color:var(--muted);letter-spacing:0;}
+  /* FIXTURE */
+  .fixture-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;}
+  .fixture-teams{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px;margin-bottom:10px;flex-wrap:wrap;}
+  .fixture-vs{color:var(--muted);font-size:12px;font-weight:400;}
+  .fixture-time{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;}
+  /* MARKETS */
+  .market-tabs{display:flex;gap:6px;margin-bottom:10px;}
+  .market-tab{flex:1;padding:7px 6px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s;}
+  .market-tab.active{background:var(--turf);border-color:var(--lime);color:var(--lime);}
+  .market-tab:hover:not(.active){border-color:var(--muted);color:var(--text);}
+  .market-options{display:flex;flex-wrap:wrap;gap:6px;}
+  .mopt{padding:7px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s;}
+  .mopt.selected{background:var(--lime);border-color:var(--lime);color:#111;font-weight:700;}
+  .mopt:hover:not(.selected){border-color:var(--muted);}
+  .score-input-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .score-input-row input{width:60px !important;text-align:center;font-family:'DM Mono',monospace;font-size:15px;}
+  .score-input-row span{color:var(--muted);font-weight:700;}
+  /* LEADERBOARD */
+  .lb-table{width:100%;border-collapse:collapse;}
+  .lb-table th{text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--border);}
+  .lb-table td{padding:9px 10px;border-bottom:1px solid var(--border);}
+  .lb-table tr:last-child td{border-bottom:none;}
+  .lb-table tr.me td{background:rgba(181,229,80,.06);}
+  .rank-badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;background:var(--border);color:var(--muted);}
+  .rank-1{background:#ffd700;color:#111;}.rank-2{background:#c0c0c0;color:#111;}.rank-3{background:#cd7f32;color:#111;}
+  /* ALERTS */
+  .alert{padding:10px 14px;border-radius:6px;margin-bottom:14px;font-size:13px;display:flex;align-items:flex-start;gap:8px;}
+  .alert-success{background:#1a3d1a;border:1px solid #2d6b2d;color:var(--lime);}
+  .alert-error{background:#3d1a1a;border:1px solid #6b1a1a;color:#ff8a8a;}
+  .alert-info{background:#1a2d3d;border:1px solid #1a4d6b;color:#6bb8ff;}
+  .alert-warn{background:#3d2a1a;border:1px solid #6b4a1a;color:var(--amber);}
+  /* MISC */
+  .mono{font-family:'DM Mono',monospace;}
+  .empty-state{text-align:center;padding:40px 20px;color:var(--muted);}
+  .pts-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-family:'DM Mono',monospace;font-size:13px;font-weight:700;}
+  .pts-10{background:#3d3d00;color:#ffe066;border:1px solid #6b6b00;}
+  .pts-3{background:#1a3d1a;color:var(--lime);border:1px solid #2d6b2d;}
+  .pts-0{background:#2a2a2a;color:var(--muted);border:1px solid #444;}
+  .pts-pending{background:#2a2a2a;color:var(--muted);border:1px solid #444;}
+  /* AUTH */
+  .auth-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;}
+  .auth-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:32px;width:100%;max-width:400px;}
+  .auth-logo{font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:3px;color:var(--lime);margin-bottom:4px;}
+  .auth-logo span{color:var(--amber);}
+  .auth-sub{color:var(--muted);font-size:13px;margin-bottom:24px;}
+  .auth-tabs{display:flex;margin-bottom:24px;background:var(--surface);border-radius:8px;padding:3px;}
+  .auth-tab{flex:1;padding:8px;text-align:center;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;color:var(--muted);transition:all .15s;background:none;border:none;font-family:'DM Sans',sans-serif;}
+  .auth-tab.active{background:var(--card);color:var(--lime);}
+  /* PREDICTIONS */
+  .pred-correct{border-left:3px solid var(--lime);}
+  .pred-wrong{border-left:3px solid var(--red);}
+  .pred-pending{border-left:3px solid var(--border);}
+  /* MISC */
+  ::-webkit-scrollbar{width:6px;height:6px;}
+  ::-webkit-scrollbar-track{background:var(--surface);}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+  .spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--lime);border-radius:50%;animation:spin .6s linear infinite;}
+  .spinner-sm{width:14px;height:14px;border-width:2px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .hero-banner{background:linear-gradient(135deg,var(--turf) 0%,var(--pitch) 100%);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px;position:relative;overflow:hidden;}
+  .hero-banner::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(255,255,255,.01) 40px,rgba(255,255,255,.01) 41px),repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(255,255,255,.01) 40px,rgba(255,255,255,.01) 41px);}
+  .hero-banner-content{position:relative;}
+  .hero-title{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:3px;color:var(--lime);margin-bottom:4px;}
+  .hero-sub{color:var(--muted);font-size:13px;}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;}
+  @media(max-width:500px){.stat-grid{grid-template-columns:repeat(2,1fr);}}
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;}
+  .stat-val{font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--lime);}
+  .stat-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+  .admin-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .admin-table th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;}
+  .admin-table td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .admin-table tr:last-child td{border-bottom:none;}
+  .admin-table tbody tr:hover td{background:rgba(255,255,255,.02);}
+  .score-result{font-family:'DM Mono',monospace;font-size:13px;color:var(--lime);}
+  .loading-full{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px;}
+  .loading-logo{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:4px;color:var(--lime);}
+  .loading-logo span{color:var(--amber);}
+  .divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted);font-size:12px;}
+  .divider::before,.divider::after{content:'';flex:1;border-top:1px solid var(--border);}
+  .link-btn{background:none;border:none;color:var(--lime);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;text-decoration:underline;padding:0;}
+  .countdown{font-family:'DM Mono',monospace;font-size:13px;color:var(--amber);}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading-screen" class="loading-full">
+  <div class="loading-logo">Turf<span>Predict</span></div>
+  <div class="spinner"></div>
+  <div style="color:var(--muted);font-size:12px;" id="loading-msg">Connecting…</div>
+</div>
+
+<!-- FIRST-TIME ADMIN SETUP -->
+<div id="setup-screen" style="display:none;">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo">Turf<span>Predict</span></div>
+      <div class="auth-sub">Welcome! Create your admin account to get started.</div>
+      <div id="setup-alert"></div>
+      <div class="form-group"><label>Admin Username</label><input id="setup-username" placeholder="e.g. admin"></div>
+      <div class="form-group"><label>Email address <span style="color:var(--muted);font-weight:400;">(used for password reset)</span></label><input type="email" id="setup-email" placeholder="you@example.com"></div>
+      <div class="form-group"><label>Password</label><input type="password" id="setup-password" placeholder="min 6 characters"></div>
+      <div class="form-group"><label>Confirm Password</label><input type="password" id="setup-confirm" placeholder="repeat password"></div>
+      <button class="btn btn-lime" style="width:100%;" id="setup-btn" onclick="createAdminAccount()">Create Admin Account →</button>
+    </div>
+  </div>
+</div>
+
+<!-- AUTH -->
+<div id="auth-screen" style="display:none;">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo">Turf<span>Predict</span></div>
+      <div class="auth-sub">Local football predictions. No money, just glory.</div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="switchAuthTab('login')">Login</button>
+        <button class="auth-tab" onclick="switchAuthTab('register')">Register</button>
+      </div>
+      <div id="auth-alert"></div>
+
+      <!-- LOGIN -->
+      <div id="auth-login">
+        <div class="form-group"><label>Username or Email</label>
+          <input type="text" id="login-username" placeholder="username or email" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div class="form-group"><label>Password</label>
+          <input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div class="check-row">
+          <input type="checkbox" id="keep-logged-in" checked>
+          <label for="keep-logged-in">Keep me logged in</label>
+        </div>
+        <button class="btn btn-lime" style="width:100%;margin-bottom:12px;" id="login-btn" onclick="doLogin()">Sign In</button>
+        <div style="text-align:center;">
+          <button class="link-btn" onclick="showForgotPassword()">Forgot password?</button>
+        </div>
+      </div>
+
+      <!-- FORGOT PASSWORD -->
+      <div id="auth-forgot" style="display:none;">
+        <div class="alert alert-info">Enter your email address and we'll send you a reset link.</div>
+        <div class="form-group"><label>Email Address</label>
+          <input type="email" id="reset-email" placeholder="you@example.com" onkeydown="if(event.key==='Enter')doForgotPassword()">
+        </div>
+        <button class="btn btn-lime" style="width:100%;margin-bottom:12px;" id="reset-btn" onclick="doForgotPassword()">Send Reset Link</button>
+        <div style="text-align:center;">
+          <button class="link-btn" onclick="showLogin()">← Back to login</button>
+        </div>
+      </div>
+
+      <!-- REGISTER -->
+      <div id="auth-register" style="display:none;">
+        <div class="form-group"><label>Username</label>
+          <input type="text" id="reg-username" placeholder="choose a username">
+        </div>
+        <div class="form-group"><label>Email <span style="color:var(--muted);font-weight:400;">(needed for password reset)</span></label>
+          <input type="email" id="reg-email" placeholder="you@example.com">
+        </div>
+        <div class="form-group"><label>Password</label>
+          <input type="password" id="reg-password" placeholder="min. 6 characters">
+        </div>
+        <div class="form-group"><label>Confirm Password</label>
+          <input type="password" id="reg-confirm" placeholder="repeat password" onkeydown="if(event.key==='Enter')doRegister()">
+        </div>
+        <div class="check-row">
+          <input type="checkbox" id="reg-keep-logged-in" checked>
+          <label for="reg-keep-logged-in">Keep me logged in</label>
+        </div>
+        <button class="btn btn-lime" style="width:100%;" id="reg-btn" onclick="doRegister()">Create Account</button>
+      </div>
+
+      <!-- ADMIN RECOVERY (hidden, for admin only) -->
+      <div id="auth-admin-recovery" style="display:none;">
+        <div class="alert alert-warn">This creates a new admin account. Only use this if you have no admin access.</div>
+        <div id="recovery-alert"></div>
+        <div class="form-group"><label>Secret Code</label>
+          <input type="password" id="recovery-code" placeholder="enter secret code">
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Set in the HTML file as ADMIN_RECOVERY_CODE</div>
+        </div>
+        <div class="form-group"><label>Username</label><input id="recovery-username" placeholder="admin"></div>
+        <div class="form-group"><label>Email</label><input type="email" id="recovery-email" placeholder="you@example.com"></div>
+        <div class="form-group"><label>Password</label><input type="password" id="recovery-password" placeholder="min 6 characters"></div>
+        <button class="btn btn-amber" style="width:100%;margin-bottom:12px;" id="recovery-btn" onclick="doAdminRecovery()">Create Admin Account</button>
+        <div style="text-align:center;"><button class="link-btn" onclick="showLogin()">← Back to login</button></div>
+      </div>
+
+      <div style="margin-top:20px;text-align:center;border-top:1px solid var(--border);padding-top:14px;">
+        <button class="link-btn" style="font-size:11px;color:var(--border);" onclick="showAdminRecovery()">Admin recovery</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="main-app" style="display:none;flex-direction:column;min-height:100vh;">
+  <div class="topbar">
+    <div class="logo">Turf<span>Predict</span></div>
+    <div class="topbar-user" id="topbar-user-info"></div>
+    <button class="btn btn-ghost btn-sm" onclick="doLogout()">Logout</button>
+  </div>
+  <div class="nav-tabs" id="main-nav"></div>
+  <div class="main" id="main-content">
+    <div style="text-align:center;padding:60px;"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// ✏️  YOUR SUPABASE CREDENTIALS — edit these two lines
+// ═══════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://cuqrtdilltdlzcgmopty.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_f2GL2gBnHCvVVxmSHKd8PA_7oqyoxTc';
+// ═══════════════════════════════════════════════════════
+// ✏️  ADMIN RECOVERY SECRET — change this to something only you know
+const ADMIN_RECOVERY_CODE = 'turf2025admin';
+// ═══════════════════════════════════════════════════════
+
+let db = null;
+let currentUser = null;
+let pendingPredictions = {};
+let activeMarketTab = {};
+let currentGWId = null;
+let currentSlipId = null;
+let currentFixtures = [];
+let adminTab = 'seasons';
+
+// ── UTILS ──────────────────────────────────────────────
+function show(id) { const el=document.getElementById(id); if(el) el.style.display=id==='main-app'?'flex':''; }
+function hide(id) { const el=document.getElementById(id); if(el) el.style.display='none'; }
+function setLoadingMsg(msg) { const el=document.getElementById('loading-msg'); if(el) el.textContent=msg; }
+
+function setLoading(btnId, on) {
+  const btn=document.getElementById(btnId); if(!btn) return;
+  btn.disabled=on;
+  if(on){ btn.dataset.orig=btn.innerHTML; btn.innerHTML='<span class="spinner spinner-sm"></span> Working…'; }
+  else btn.innerHTML=btn.dataset.orig||btn.innerHTML;
+}
+
+function fmtDate(dt) {
+  if(!dt) return '—';
+  try{ return new Date(dt).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+  catch{ return dt; }
+}
+
+function fmtCountdown(closesAt) {
+  const diff=new Date(closesAt)-new Date();
+  if(diff<=0) return 'Closed';
+  const h=Math.floor(diff/3600000), m=Math.floor((diff%3600000)/60000);
+  if(h>48) return `${Math.floor(h/24)}d ${h%24}h`;
+  if(h>0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+async function hashPwd(pwd) {
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(pwd+'_turfpredict_v2'));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function formatSelection(pred) {
+  if(!pred) return '—';
+  if(pred.market_type==='1X2') return {home:'Home Win',draw:'Draw',away:'Away Win'}[pred.selection_value]||pred.selection_value;
+  if(pred.market_type==='GOALS') return pred.selection_value.replace('over_','Over ').replace('under_','Under ');
+  if(pred.market_type==='SCORE') return `Score: ${pred.selection_value}`;
+  return pred.selection_value;
+}
+
+function authAlert(msg,type='error') {
+  document.getElementById('auth-alert').innerHTML=`<div class="alert alert-${type}">${msg}</div>`;
+}
+
+// ── INIT ────────────────────────────────────────────────
+async function init() {
+  // Validate credentials are set
+  if (!SUPABASE_URL || SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+    document.getElementById('loading-screen').innerHTML = `
+      <div style="max-width:500px;padding:32px;background:var(--card);border:2px solid var(--amber);border-radius:14px;margin:20px;text-align:left;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--amber);margin-bottom:12px;">⚙️ Setup Required</div>
+        <p style="color:var(--muted);font-size:13px;line-height:1.8;margin-bottom:16px;">
+          Open this HTML file in a text editor and replace the two placeholder values near the top of the &lt;script&gt; tag:
+        </p>
+        <code style="display:block;background:#111;padding:14px;border-radius:8px;font-size:12px;color:var(--lime);line-height:2;">
+          const SUPABASE_URL = '<span style="color:var(--amber);">https://xxxx.supabase.co</span>';<br>
+          const SUPABASE_ANON_KEY = '<span style="color:var(--amber);">your-anon-key-here</span>';
+        </code>
+        <p style="color:var(--muted);font-size:12px;margin-top:12px;">Then save the file, upload to GitHub, done. Users will never see this screen.</p>
+      </div>`;
+    return;
+  }
+
+  try {
+    db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    setLoadingMsg('Checking database…');
+
+    const { error } = await db.from('users').select('id').limit(1);
+    if (error) throw error;
+
+    setLoadingMsg('Ready!');
+
+    // Check if any users exist at all
+    const { data: anyUsers } = await db.from('users').select('id').limit(1);
+    if (!anyUsers?.length) {
+      hide('loading-screen'); show('setup-screen'); return;
+    }
+
+    // Check for saved session
+    const savedId = localStorage.getItem('tp_uid') || sessionStorage.getItem('tp_uid');
+    if (savedId) {
+      const { data: u } = await db.from('users').select('*').eq('id', savedId).eq('active', true).limit(1);
+      if (u?.[0]) { currentUser=u[0]; hide('loading-screen'); showApp(); return; }
+    }
+    // Clear stale session
+    localStorage.removeItem('tp_uid'); sessionStorage.removeItem('tp_uid');
+    hide('loading-screen'); show('auth-screen');
+
+  } catch(e) {
+    document.getElementById('loading-screen').innerHTML = `
+      <div style="max-width:480px;padding:24px;text-align:center;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--red);margin-bottom:12px;">Connection Failed</div>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">${e.message}</p>
+        <p style="color:var(--muted);font-size:12px;">Check your Supabase URL and anon key in the HTML file, and make sure you ran the SQL setup script.</p>
+        <button class="btn btn-outline" style="margin-top:16px;" onclick="location.reload()">Try Again</button>
+      </div>`;
+  }
+}
+
+function showAdminRecovery() {
+  ['auth-login','auth-register','auth-forgot'].forEach(id => document.getElementById(id).style.display='none');
+  document.getElementById('auth-admin-recovery').style.display='';
+  document.querySelectorAll('.auth-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('auth-alert').innerHTML='';
+  document.getElementById('recovery-alert').innerHTML='';
+}
+
+async function doAdminRecovery() {
+  const code = document.getElementById('recovery-code').value;
+  const username = document.getElementById('recovery-username').value.trim();
+  const email = document.getElementById('recovery-email').value.trim();
+  const password = document.getElementById('recovery-password').value;
+  const alertEl = document.getElementById('recovery-alert');
+  if (code !== ADMIN_RECOVERY_CODE) { alertEl.innerHTML='<div class="alert alert-error">Wrong secret code.</div>'; return; }
+  if (!username||!email||!password) { alertEl.innerHTML='<div class="alert alert-error">All fields required.</div>'; return; }
+  if (password.length < 6) { alertEl.innerHTML='<div class="alert alert-error">Password min 6 characters.</div>'; return; }
+  setLoading('recovery-btn', true);
+  try {
+    const hash = await hashPwd(password);
+    const { data, error } = await db.from('users').insert({username, email, password_hash: hash, role:'admin'}).select().single();
+    if (error) throw error;
+    currentUser = data;
+    localStorage.setItem('tp_uid', data.id);
+    showApp();
+  } catch(e) {
+    alertEl.innerHTML = `<div class="alert alert-error">Failed: ${e.message}</div>`;
+  } finally { setLoading('recovery-btn', false); }
+}
+
+// ── AUTH SCREENS ────────────────────────────────────────
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((t,i)=>t.classList.toggle('active',(tab==='login'&&i===0)||(tab==='register'&&i===1)));
+  document.getElementById('auth-login').style.display=tab==='login'?'':'none';
+  document.getElementById('auth-register').style.display=tab==='register'?'':'none';
+  document.getElementById('auth-forgot').style.display='none';
+  document.getElementById('auth-alert').innerHTML='';
+}
+
+function showForgotPassword() {
+  document.getElementById('auth-login').style.display='none';
+  document.getElementById('auth-forgot').style.display='';
+  document.getElementById('auth-alert').innerHTML='';
+  document.querySelectorAll('.auth-tab').forEach(t=>t.classList.remove('active'));
+}
+
+function showLogin() {
+  document.getElementById('auth-login').style.display='';
+  document.getElementById('auth-forgot').style.display='none';
+  document.getElementById('auth-register').style.display='none';
+  document.querySelector('.auth-tab').classList.add('active');
+  document.getElementById('auth-alert').innerHTML='';
+}
+
+function saveSession(userId, keepLoggedIn) {
+  if (keepLoggedIn) { localStorage.setItem('tp_uid', userId); sessionStorage.removeItem('tp_uid'); }
+  else { sessionStorage.setItem('tp_uid', userId); localStorage.removeItem('tp_uid'); }
+}
+
+// ── LOGIN ────────────────────────────────────────────────
+async function doLogin() {
+  const input=document.getElementById('login-username').value.trim();
+  const password=document.getElementById('login-password').value;
+  const keep=document.getElementById('keep-logged-in').checked;
+  if(!input||!password) return authAlert('Please fill all fields.');
+  setLoading('login-btn',true);
+  try {
+    // Support login by username OR email
+    const isEmail=input.includes('@');
+    const query=isEmail
+      ? db.from('users').select('*').ilike('email',input).limit(1)
+      : db.from('users').select('*').ilike('username',input).limit(1);
+    const { data: users, error }=await query;
+    if(error) throw error;
+    if(!users?.length) return authAlert('Account not found. Check username/email.');
+    const user=users[0];
+    if(!user.active) return authAlert('Account deactivated. Contact admin.');
+    const hash=await hashPwd(password);
+    if(hash!==user.password_hash) return authAlert('Wrong password. Try again or use "Forgot password?".');
+    currentUser=user;
+    saveSession(user.id, keep);
+    showApp();
+  } catch(e) { authAlert('Login failed: '+e.message); }
+  finally { setLoading('login-btn',false); }
+}
+
+// ── FORGOT PASSWORD ──────────────────────────────────────
+async function doForgotPassword() {
+  const email=document.getElementById('reset-email').value.trim();
+  if(!email) return authAlert('Enter your email address.');
+  setLoading('reset-btn',true);
+  try {
+    // Check user exists with this email
+    const { data: users }=await db.from('users').select('id,email').ilike('email',email).limit(1);
+    if(!users?.length) {
+      authAlert('No account found with that email. Try a different address or register.');
+      return;
+    }
+    // Use Supabase auth magic link — works even with custom auth table since
+    // we're just sending an email; user clicks link which brings them back
+    // to a password reset page we handle
+    const { error }=await db.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.href+'?reset=1'
+    });
+    // Even if supabase auth isn't fully set up, tell user to contact admin
+    authAlert('If your email is registered, a reset link has been sent. Check your inbox (and spam folder).<br><br>If you don\'t receive it within a few minutes, ask your admin to reset your password manually.','success');
+  } catch(e) {
+    authAlert('Could not send reset email. Please ask your admin to reset your password.');
+  } finally { setLoading('reset-btn',false); }
+}
+
+// ── REGISTER ─────────────────────────────────────────────
+async function doRegister() {
+  const username=document.getElementById('reg-username').value.trim();
+  const email=document.getElementById('reg-email').value.trim();
+  const password=document.getElementById('reg-password').value;
+  const confirm=document.getElementById('reg-confirm').value;
+  const keep=document.getElementById('reg-keep-logged-in').checked;
+  if(!username||!password) return authAlert('Username and password required.');
+  if(username.length<3) return authAlert('Username must be at least 3 characters.');
+  if(password.length<6) return authAlert('Password must be at least 6 characters.');
+  if(password!==confirm) return authAlert('Passwords do not match.');
+  if(!email) return authAlert('Email is required for account recovery. Please enter one.');
+  setLoading('reg-btn',true);
+  try {
+    const { data: ex1 }=await db.from('users').select('id').ilike('username',username).limit(1);
+    if(ex1?.length) return authAlert('Username already taken. Choose a different one.');
+    const { data: ex2 }=await db.from('users').select('id').ilike('email',email).limit(1);
+    if(ex2?.length) return authAlert('An account with that email already exists.');
+    const hash=await hashPwd(password);
+    const { data, error }=await db.from('users').insert({username,email,password_hash:hash,role:'user'}).select().single();
+    if(error) throw error;
+    currentUser=data;
+    saveSession(data.id, keep);
+    showApp();
+  } catch(e) { authAlert('Registration failed: '+e.message); }
+  finally { setLoading('reg-btn',false); }
+}
+
+// ── FIRST-TIME ADMIN SETUP ───────────────────────────────
+async function createAdminAccount() {
+  const username=document.getElementById('setup-username').value.trim();
+  const email=document.getElementById('setup-email').value.trim();
+  const password=document.getElementById('setup-password').value;
+  const confirm=document.getElementById('setup-confirm').value;
+  const alertEl=document.getElementById('setup-alert');
+  if(!username||!password||!email) { alertEl.innerHTML='<div class="alert alert-error">All fields required.</div>'; return; }
+  if(password.length<6) { alertEl.innerHTML='<div class="alert alert-error">Password min 6 characters.</div>'; return; }
+  if(password!==confirm) { alertEl.innerHTML='<div class="alert alert-error">Passwords don\'t match.</div>'; return; }
+  setLoading('setup-btn',true);
+  try {
+    const hash=await hashPwd(password);
+    const { data, error }=await db.from('users').insert({username,email,password_hash:hash,role:'admin'}).select().single();
+    if(error) throw error;
+    currentUser=data;
+    localStorage.setItem('tp_uid', data.id);
+    showApp();
+  } catch(e) {
+    alertEl.innerHTML=`<div class="alert alert-error">Failed: ${e.message}</div>`;
+  } finally { setLoading('setup-btn',false); }
+}
+
+// ── LOGOUT ───────────────────────────────────────────────
+function doLogout() {
+  currentUser=null;
+  localStorage.removeItem('tp_uid');
+  sessionStorage.removeItem('tp_uid');
+  hide('main-app'); show('auth-screen');
+  document.getElementById('auth-alert').innerHTML='';
+  showLogin();
+}
+
+// ── APP SHELL ────────────────────────────────────────────
+function showApp() {
+  hide('auth-screen'); hide('loading-screen'); hide('setup-screen');
+  document.getElementById('main-app').style.display='flex';
+  document.getElementById('topbar-user-info').innerHTML=
+    `<strong>${currentUser.username}</strong>${currentUser.role==='admin'?' &nbsp;<span class="badge badge-admin">Admin</span>':''}`;
+  renderNav();
+  renderPage('home');
+}
+
+function renderNav() {
+  const isAdmin=currentUser.role==='admin';
+  const tabs=isAdmin
+    ? [['home','🏠 Home'],['predict','⚽ Predict'],['myslips','📋 My Slips'],['leaderboard','🏆 Leaderboard'],['admin','⚙️ Admin']]
+    : [['home','🏠 Home'],['predict','⚽ Predict'],['myslips','📋 My Slips'],['leaderboard','🏆 Leaderboard']];
+  document.getElementById('main-nav').innerHTML=tabs.map(([id,label])=>
+    `<button class="nav-tab" data-page="${id}" onclick="renderPage('${id}')">${label}</button>`).join('');
+}
+
+function renderPage(page) {
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active',t.dataset.page===page));
+  const c=document.getElementById('main-content');
+  c.innerHTML='<div style="text-align:center;padding:60px;"><div class="spinner"></div></div>';
+  const map={home:renderHome,predict:renderPredict,myslips:renderMySlips,leaderboard:renderLeaderboard,admin:renderAdmin};
+  if(map[page]) map[page](c);
+}
+
+// ══════════════════════════════════════════════════════
+// HOME
+// ══════════════════════════════════════════════════════
+async function renderHome(container) {
+  try {
+    const [{ data: seasons },{ data: mySlips },{ data: preds }]=await Promise.all([
+      db.from('seasons').select('*').order('created_at',{ascending:false}),
+      db.from('slips').select('*').eq('user_id',currentUser.id),
+      db.from('predictions').select('*,slips!inner(user_id)').eq('slips.user_id',currentUser.id)
+    ]);
+    const activeSeason=seasons?.find(s=>s.is_active);
+    let openWeek=null, openFixtures=[], myOpenSlip=null;
+    if(activeSeason) {
+      const { data: gws }=await db.from('gameweeks').select('*').eq('season_id',activeSeason.id).eq('status','open').order('opens_at',{ascending:false}).limit(1);
+      openWeek=gws?.[0];
+      if(openWeek) {
+        const [{ data: fx },{ data: slip }]=await Promise.all([
+          db.from('fixtures').select('*').eq('gameweek_id',openWeek.id).order('kickoff_at'),
+          db.from('slips').select('*').eq('user_id',currentUser.id).eq('gameweek_id',openWeek.id).limit(1)
+        ]);
+        openFixtures=fx||[]; myOpenSlip=slip?.[0];
+      }
+    }
+    const totalPts=(mySlips||[]).reduce((a,s)=>a+(s.points_total||0),0);
+    const correct=(preds||[]).filter(p=>p.points_awarded>0&&p.scored).length;
+
+    // Recent scored weeks
+    let recentHTML='';
+    if(activeSeason) {
+      const { data: scored }=await db.from('gameweeks').select('*').eq('season_id',activeSeason.id).eq('status','scored').order('closes_at',{ascending:false}).limit(3);
+      if(scored?.length) {
+        recentHTML='<div class="section-title" style="margin-top:6px;">Recent Results</div>'+scored.map(gw=>{
+          const sl=(mySlips||[]).find(s=>s.gameweek_id===gw.id);
+          return `<div class="card"><div class="card-header">
+            <span class="card-title" style="font-size:15px;">${gw.name}</span>
+            <span class="badge badge-scored">✓ Scored</span></div>
+            ${sl?`<div style="font-size:13px;">Your score: <span class="pts-pill ${sl.points_total>=10?'pts-10':'pts-3'}" style="font-size:15px;">${sl.points_total} pts</span></div>`
+              :`<div style="font-size:12px;color:var(--muted);">No slip submitted</div>`}
+          </div>`;
+        }).join('');
+      }
+    }
+
+    container.innerHTML=`
+      <div class="hero-banner"><div class="hero-banner-content">
+        <div class="hero-title">Welcome, ${currentUser.username}!</div>
+        <div class="hero-sub">${activeSeason?activeSeason.name:'No active season'} &nbsp;·&nbsp; Predict. Score. Climb.</div>
+      </div></div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-val">${totalPts}</div><div class="stat-lbl">Season Points</div></div>
+        <div class="stat-card"><div class="stat-val">${(mySlips||[]).length}</div><div class="stat-lbl">Slips Submitted</div></div>
+        <div class="stat-card"><div class="stat-val">${correct}</div><div class="stat-lbl">Correct Picks</div></div>
+      </div>
+      <div class="section-title">Current Week</div>
+      ${openWeek?`<div class="card">
+        <div class="card-header"><span class="card-title">${openWeek.name}</span><span class="badge badge-open">● Open</span></div>
+        <div style="color:var(--muted);font-size:12px;margin-bottom:12px;">
+          Closes: <strong style="color:var(--amber);">${fmtDate(openWeek.closes_at)}</strong>
+          &nbsp;·&nbsp;<span class="countdown">⏱ ${fmtCountdown(openWeek.closes_at)} left</span>
+          &nbsp;·&nbsp;${openFixtures.length} fixtures
+        </div>
+        ${myOpenSlip
+          ?`<div class="alert alert-success">✓ Slip submitted! <button class="btn btn-sm btn-outline" onclick="renderPage('predict')" style="margin-left:8px;">View / Edit</button></div>`
+          :`<div class="alert alert-warn">⚠ No slip yet! <button class="btn btn-sm btn-lime" onclick="renderPage('predict')" style="margin-left:8px;">Predict Now →</button></div>`}
+        ${openFixtures.map(f=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+          <span style="font-weight:600;font-size:13px;">${f.home_team} <span style="color:var(--muted);font-weight:400;">vs</span> ${f.away_team}</span>
+          <span class="mono" style="font-size:11px;color:var(--muted);">${fmtDate(f.kickoff_at)}</span>
+        </div>`).join('')}
+      </div>`:`<div class="alert alert-info">No open game week right now. Check back soon!</div>`}
+      ${recentHTML}`;
+  } catch(e){ container.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
+}
+
+// ══════════════════════════════════════════════════════
+// PREDICT
+// ══════════════════════════════════════════════════════
+async function renderPredict(container) {
+  pendingPredictions={}; activeMarketTab={}; currentSlipId=null; currentGWId=null; currentFixtures=[];
+  try {
+    const { data: seasons }=await db.from('seasons').select('*').eq('is_active',true).limit(1);
+    const activeSeason=seasons?.[0];
+    if(!activeSeason){ container.innerHTML=`<div class="alert alert-info">No active season.</div>`; return; }
+    const { data: gws }=await db.from('gameweeks').select('*').eq('season_id',activeSeason.id).eq('status','open').order('opens_at',{ascending:false}).limit(1);
+    const openWeek=gws?.[0];
+    if(!openWeek){ container.innerHTML=`<div class="alert alert-info">No open game week. Come back when predictions open!</div>`; return; }
+    currentGWId=openWeek.id;
+    const [{ data: fixtures },{ data: mySlips }]=await Promise.all([
+      db.from('fixtures').select('*').eq('gameweek_id',openWeek.id).order('kickoff_at'),
+      db.from('slips').select('*,predictions(*)').eq('user_id',currentUser.id).eq('gameweek_id',openWeek.id).limit(1)
+    ]);
+    currentFixtures=fixtures||[];
+    if(!currentFixtures.length){ container.innerHTML=`<div class="alert alert-info">No fixtures posted for this week yet.</div>`; return; }
+    const mySlip=mySlips?.[0];
+    if(mySlip){ currentSlipId=mySlip.id; (mySlip.predictions||[]).forEach(p=>{ pendingPredictions[p.fixture_id]={market_type:p.market_type,selection_value:p.selection_value}; activeMarketTab[p.fixture_id]=p.market_type; }); }
+
+    container.innerHTML=`
+      <div class="section-title">⚽ ${openWeek.name} — Predictions</div>
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div><div style="font-size:12px;color:var(--muted);">Closes</div>
+            <div style="font-weight:600;color:var(--amber);">${fmtDate(openWeek.closes_at)} &nbsp;<span class="countdown">(${fmtCountdown(openWeek.closes_at)} left)</span></div>
+          </div>
+          ${mySlip?`<span class="badge badge-open">Slip submitted — editing allowed</span>`:`<span class="badge badge-closed">No slip yet</span>`}
+        </div>
+      </div>
+      <div class="alert alert-info" style="margin-bottom:16px;">Choose <strong>one market per match</strong>. You can edit until the week closes.</div>
+      <div id="fixtures-predict">${currentFixtures.map(f=>renderFixturePredict(f)).join('')}</div>
+      <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-lime" id="submit-slip-btn" onclick="submitSlip()">${mySlip?'💾 Update Slip':'✓ Submit Slip'}</button>
+      </div>
+      <div id="predict-alert" style="margin-top:14px;"></div>`;
+  } catch(e){ container.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
+}
+
+function renderFixturePredict(f) {
+  const mTab=activeMarketTab[f.id]||'1X2';
+  const pred=pendingPredictions[f.id]||null;
+  const goalsOpts=['over_0.5','under_0.5','over_1.5','under_1.5','over_2.5','under_2.5','over_3.5','under_3.5','over_4.5','under_4.5'];
+  const [sh,sa]=(pred?.market_type==='SCORE'&&pred?.selection_value)?pred.selection_value.split('-'):['',''];
+  return `<div class="fixture-card" id="fp-${f.id}">
+    <div class="fixture-teams">
+      <span>${f.home_team}</span><span class="fixture-vs">vs</span><span>${f.away_team}</span>
+      <span style="margin-left:auto;" class="fixture-time">${fmtDate(f.kickoff_at)}</span>
+    </div>
+    ${pred?`<div style="margin-bottom:8px;font-size:12px;color:var(--muted);">Selected: <strong style="color:var(--lime);">${formatSelection(pred)}</strong></div>`:''}
+    <div class="market-tabs">
+      <button class="market-tab${mTab==='1X2'?' active':''}" onclick="setMarketTab('${f.id}','1X2')">1X2</button>
+      <button class="market-tab${mTab==='GOALS'?' active':''}" onclick="setMarketTab('${f.id}','GOALS')">Goals O/U</button>
+      <button class="market-tab${mTab==='SCORE'?' active':''}" onclick="setMarketTab('${f.id}','SCORE')">Correct Score</button>
+    </div>
+    ${mTab==='1X2'?`<div class="market-options">
+      ${['home','draw','away'].map(v=>`<button class="mopt${pred?.market_type==='1X2'&&pred?.selection_value===v?' selected':''}" onclick="selectPrediction('${f.id}','1X2','${v}')">${{home:f.home_team,draw:'Draw',away:f.away_team}[v]}</button>`).join('')}
+    </div>`:''}
+    ${mTab==='GOALS'?`<div class="market-options">
+      ${goalsOpts.map(v=>`<button class="mopt${pred?.market_type==='GOALS'&&pred?.selection_value===v?' selected':''}" onclick="selectPrediction('${f.id}','GOALS','${v}')">${v.replace('over_','Over ').replace('under_','Under ')}</button>`).join('')}
+    </div>`:''}
+    ${mTab==='SCORE'?`<div>
+      <div class="score-input-row">
+        <input type="number" id="sh-${f.id}" min="0" max="20" value="${sh}" placeholder="0">
+        <span>—</span>
+        <input type="number" id="sa-${f.id}" min="0" max="20" value="${sa}" placeholder="0">
+        <button class="btn btn-sm btn-outline" onclick="confirmScore('${f.id}')">Set Score</button>
+      </div>
+      ${pred?.market_type==='SCORE'?`<span style="font-size:12px;color:var(--lime);">✓ Set: ${pred.selection_value}</span>`:''}
+    </div>`:''}
+  </div>`;
+}
+
+function setMarketTab(fId,tab) {
+  activeMarketTab[fId]=tab;
+  if(pendingPredictions[fId]?.market_type!==tab) delete pendingPredictions[fId];
+  const f=currentFixtures.find(x=>x.id===fId);
+  if(f){ const el=document.getElementById('fp-'+fId); if(el) el.outerHTML=renderFixturePredict(f); }
+}
+function selectPrediction(fId,market,val) {
+  pendingPredictions[fId]={market_type:market,selection_value:val};
+  const f=currentFixtures.find(x=>x.id===fId);
+  if(f){ const el=document.getElementById('fp-'+fId); if(el) el.outerHTML=renderFixturePredict(f); }
+}
+function confirmScore(fId) {
+  const h=parseInt(document.getElementById('sh-'+fId)?.value)||0;
+  const a=parseInt(document.getElementById('sa-'+fId)?.value)||0;
+  if(h<0||a<0||h>20||a>20){ alert('Score must be between 0 and 20'); return; }
+  pendingPredictions[fId]={market_type:'SCORE',selection_value:`${h}-${a}`};
+  const f=currentFixtures.find(x=>x.id===fId);
+  if(f){ const el=document.getElementById('fp-'+fId); if(el) el.outerHTML=renderFixturePredict(f); }
+}
+
+async function submitSlip() {
+  const missing=currentFixtures.filter(f=>!pendingPredictions[f.id]);
+  if(missing.length){
+    document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">⚠ Make a prediction for all ${currentFixtures.length} fixtures. Missing: ${missing.map(f=>f.home_team+' vs '+f.away_team).join(', ')}</div>`;
+    missing.forEach(f=>{ const el=document.getElementById('fp-'+f.id); if(el) el.style.border='1px solid var(--red)'; });
+    return;
+  }
+  setLoading('submit-slip-btn',true);
+  try {
+    // Re-check week is still open server-side before saving
+    const { data: gwCheck } = await db.from('gameweeks').select('status').eq('id', currentGWId).single();
+    if (!gwCheck || gwCheck.status !== 'open') {
+      document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">⛔ This week has been closed by the admin. No more predictions can be submitted.</div>`;
+      setLoading('submit-slip-btn',false);
+      setTimeout(() => renderPage('predict'), 2000);
+      return;
+    }
+    const now=new Date().toISOString();
+    let slipId=currentSlipId;
+    if(!slipId){
+      const { data, error }=await db.from('slips').insert({user_id:currentUser.id,gameweek_id:currentGWId,submitted_at:now,points_total:0}).select().single();
+      if(error) throw error;
+      slipId=data.id; currentSlipId=slipId;
+    } else {
+      await db.from('slips').update({submitted_at:now}).eq('id',slipId);
+      await db.from('predictions').delete().eq('slip_id',slipId);
+    }
+    const { error:pe }=await db.from('predictions').insert(currentFixtures.map(f=>({
+      slip_id:slipId, fixture_id:f.id, market_type:pendingPredictions[f.id].market_type,
+      selection_value:pendingPredictions[f.id].selection_value, points_awarded:0, scored:false
+    })));
+    if(pe) throw pe;
+    document.getElementById('predict-alert').innerHTML=`<div class="alert alert-success">✓ Slip ${currentSlipId?'updated':'submitted'} successfully! Good luck 🍀</div>`;
+    document.getElementById('submit-slip-btn').dataset.orig='💾 Update Slip';
+  } catch(e){ document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">Failed: ${e.message}</div>`; }
+  finally { setLoading('submit-slip-btn',false); }
+}
+
+// ══════════════════════════════════════════════════════
+// MY SLIPS
+// ══════════════════════════════════════════════════════
+async function renderMySlips(container) {
+  try {
+    const { data: slips }=await db.from('slips').select('*,gameweeks(*),predictions(*,fixtures(*))').eq('user_id',currentUser.id).order('submitted_at',{ascending:false});
+    if(!slips?.length){ container.innerHTML=`<div class="section-title">My Slips</div><div class="empty-state">No slips yet. Head to Predict to submit your first one!</div>`; return; }
+    container.innerHTML=`<div class="section-title">📋 My Slips</div>`+slips.map(slip=>{
+      const gw=slip.gameweeks; if(!gw) return '';
+      const scored=gw.status==='scored';
+      const preds=slip.predictions||[];
+      return `<div class="card">
+        <div class="card-header">
+          <span class="card-title" style="font-size:16px;">${gw.name}</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            ${scored?`<span class="pts-pill ${slip.points_total>=10?'pts-10':'pts-3'}">${slip.points_total} pts</span>`:''}
+            <span class="badge badge-${gw.status==='open'?'open':gw.status==='closed'?'closed':'scored'}">${gw.status}</span>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Submitted: ${fmtDate(slip.submitted_at)}</div>
+        ${preds.map(pred=>{
+          const f=pred.fixtures; if(!f) return '';
+          const rc=!scored?'pred-pending':pred.points_awarded>0?'pred-correct':'pred-wrong';
+          const pts=!scored?`<span class="pts-pill pts-pending">—</span>`
+            :pred.points_awarded>=10?`<span class="pts-pill pts-10">+${pred.points_awarded}</span>`
+            :pred.points_awarded>0?`<span class="pts-pill pts-3">+${pred.points_awarded}</span>`
+            :`<span class="pts-pill pts-0">0</span>`;
+          return `<div class="fixture-card ${rc}" style="padding:10px 14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+              <div>
+                <div style="font-weight:600;font-size:13px;">${f.home_team} <span style="color:var(--muted);font-weight:400;">vs</span> ${f.away_team}</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+                  Pick: <strong style="color:var(--text);">${formatSelection(pred)}</strong>
+                  ${scored&&f.result_entered?`&nbsp;·&nbsp;Result: <span class="score-result">${f.final_home_goals}–${f.final_away_goals}</span>`:''}
+                </div>
+              </div>${pts}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('');
+  } catch(e){ container.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
+}
+
+// ══════════════════════════════════════════════════════
+// LEADERBOARD
+// ══════════════════════════════════════════════════════
+async function renderLeaderboard(container) {
+  try {
+    const { data: seasons }=await db.from('seasons').select('*').eq('is_active',true).limit(1);
+    const activeSeason=seasons?.[0];
+    if(!activeSeason){ container.innerHTML=`<div class="alert alert-info">No active season.</div>`; return; }
+    const [{ data: allUsers },{ data: gws }]=await Promise.all([
+      db.from('users').select('id,username').eq('role','user').eq('active',true),
+      db.from('gameweeks').select('*').eq('season_id',activeSeason.id)
+    ]);
+    const scoredGWIds=(gws||[]).filter(g=>g.status==='scored').map(g=>g.id);
+    if(!scoredGWIds.length){
+      container.innerHTML=`<div class="section-title">🏆 Leaderboards</div><div class="alert alert-info">No scored weeks yet.</div>${tiebreakCard()}`;
+      return;
+    }
+    const { data: slips }=await db.from('slips').select('*,predictions(*)').in('gameweek_id',scoredGWIds);
+    const seasonLB=buildLB(allUsers||[],slips||[],scoredGWIds);
+    const latestGW=(gws||[]).filter(g=>g.status==='scored').sort((a,b)=>new Date(b.closes_at)-new Date(a.closes_at))[0];
+    const weekLB=latestGW?buildLB(allUsers||[],slips||[],[latestGW.id]):[];
+    container.innerHTML=`<div class="section-title">🏆 Leaderboards</div>
+      ${lbTable(seasonLB,activeSeason.name+' — Season')}
+      ${latestGW?lbTable(weekLB,latestGW.name+' — Weekly'):''}
+      ${tiebreakCard()}`;
+  } catch(e){ container.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
+}
+
+function buildLB(users,slips,gwIds) {
+  return users.map(u=>{
+    const mySlips=slips.filter(s=>s.user_id===u.id&&gwIds.includes(s.gameweek_id));
+    const total=mySlips.reduce((a,s)=>a+(s.points_total||0),0);
+    const allPreds=mySlips.flatMap(s=>s.predictions||[]).filter(p=>p.scored);
+    return {userId:u.id,username:u.username,points:total,exactScores:allPreds.filter(p=>p.points_awarded===10).length,correctTotal:allPreds.filter(p=>p.points_awarded>0).length,slips:mySlips.length,earliestSlip:mySlips.reduce((min,s)=>(!min||new Date(s.submitted_at)<new Date(min))?s.submitted_at:min,null)};
+  }).filter(r=>r.slips>0).sort(lbSort);
+}
+function lbSort(a,b){
+  if(b.points!==a.points) return b.points-a.points;
+  if(b.exactScores!==a.exactScores) return b.exactScores-a.exactScores;
+  if(b.correctTotal!==a.correctTotal) return b.correctTotal-a.correctTotal;
+  if(a.earliestSlip&&b.earliestSlip) return new Date(a.earliestSlip)-new Date(b.earliestSlip);
+  return 0;
+}
+function lbTable(data,title){
+  if(!data.length) return `<div class="card"><div class="card-title">${title}</div><div class="empty-state" style="padding:20px;">No data yet</div></div>`;
+  let rank=1;
+  data.forEach((r,i)=>{ if(i>0&&lbSort(data[i-1],r)===0) r.rank=data[i-1].rank; else r.rank=rank; rank++; });
+  return `<div class="card"><div class="card-title" style="margin-bottom:14px;">${title}</div>
+    <table class="lb-table"><thead><tr><th>#</th><th>Player</th><th style="text-align:right;">Pts</th><th style="text-align:right;">Correct</th><th style="text-align:right;">Scores</th></tr></thead>
+    <tbody>${data.map(r=>`<tr class="${r.userId===currentUser.id?'me':''}">
+      <td><span class="rank-badge ${r.rank<=3?'rank-'+r.rank:''}">${r.rank}</span></td>
+      <td>${r.username}${r.userId===currentUser.id?' <span class="badge badge-open" style="font-size:9px;padding:1px 5px;">You</span>':''}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--lime);">${r.points}</td>
+      <td style="text-align:right;color:var(--muted);font-size:13px;">${r.correctTotal}</td>
+      <td style="text-align:right;color:var(--amber);font-size:13px;">${r.exactScores}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function tiebreakCard(){
+  return `<div class="card" style="margin-top:8px;"><div class="card-title" style="margin-bottom:8px;">Tie-break Rules</div>
+    <p style="font-size:13px;color:var(--muted);line-height:1.8;">1. More exact Correct Score hits (10pt picks)<br>2. More total correct predictions<br>3. Earlier slip submission time<br>4. Shown as tied if all equal</p></div>`;
+}
+
+// ══════════════════════════════════════════════════════
+// ADMIN
+// ══════════════════════════════════════════════════════
+async function renderAdmin(container) {
+  if(currentUser.role!=='admin'){ container.innerHTML=`<div class="alert alert-error">Access denied.</div>`; return; }
+  container.innerHTML=`<div class="section-title">⚙️ Admin Dashboard</div>
+    <div class="nav-tabs" style="margin-bottom:16px;border-radius:8px;">
+      ${['seasons','gameweeks','fixtures','results','users'].map(t=>
+        `<button class="nav-tab ${adminTab===t?'active':''}" onclick="setAdminTab('${t}')">${{seasons:'🏆 Seasons',gameweeks:'📅 Weeks',fixtures:'⚽ Fixtures',results:'📊 Results',users:'👥 Users'}[t]}</button>`
+      ).join('')}
+    </div>
+    <div id="atab"><div style="text-align:center;padding:30px;"><div class="spinner"></div></div></div>`;
+  loadAtab(adminTab);
+}
+function setAdminTab(tab){
+  adminTab=tab;
+  document.querySelectorAll('#main-content .nav-tab').forEach(t=>{ const m=t.getAttribute('onclick')?.match(/'(\w+)'/); if(m) t.classList.toggle('active',m[1]===tab); });
+  loadAtab(tab);
+}
+async function loadAtab(tab){
+  const el=document.getElementById('atab'); if(!el) return;
+  el.innerHTML='<div style="text-align:center;padding:30px;"><div class="spinner"></div></div>';
+  try{
+    if(tab==='seasons') el.innerHTML=await aSeasons();
+    else if(tab==='gameweeks') el.innerHTML=await aGW();
+    else if(tab==='fixtures') el.innerHTML=await aFixtures();
+    else if(tab==='results') el.innerHTML=await aResults();
+    else if(tab==='users') el.innerHTML=await aUsers();
+  }catch(e){ el.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
+}
+
+// SEASONS
+async function aSeasons(){
+  const { data: seasons }=await db.from('seasons').select('*').order('created_at',{ascending:false});
+  return `<div class="card"><div class="card-header"><span class="card-title">Seasons</span></div>
+    <table class="admin-table"><thead><tr><th>Name</th><th>Start</th><th>End</th><th>Status</th><th></th></tr></thead><tbody>
+      ${(seasons||[]).map(s=>`<tr><td><strong>${s.name}</strong></td><td>${s.start_date}</td><td>${s.end_date}</td>
+        <td>${s.is_active?'<span class="badge badge-open">Active</span>':'<span class="badge badge-pending">Inactive</span>'}</td>
+        <td><button class="btn btn-sm ${s.is_active?'btn-outline':'btn-lime'}" onclick="adminToggleSeason('${s.id}',${s.is_active})">${s.is_active?'Deactivate':'Activate'}</button></td>
+      </tr>`).join('')}
+    </tbody></table></div>
+  <div class="card"><div class="card-title" style="margin-bottom:14px;">New Season</div>
+    <div class="form-group"><label>Name</label><input id="sname" placeholder="Season 2026"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Start Date</label><input type="date" id="sstart"></div>
+      <div class="form-group"><label>End Date</label><input type="date" id="send"></div>
+    </div>
+    <button class="btn btn-lime" id="cs-btn" onclick="adminCreateSeason()">Create Season</button>
+    <div id="s-alert" style="margin-top:10px;"></div>
+  </div>`;
+}
+async function adminCreateSeason(){
+  const name=document.getElementById('sname').value.trim();
+  const start=document.getElementById('sstart').value;
+  const end=document.getElementById('send').value;
+  if(!name||!start||!end){ document.getElementById('s-alert').innerHTML='<div class="alert alert-error">All fields required.</div>'; return; }
+  setLoading('cs-btn',true);
+  const { error }=await db.from('seasons').insert({name,start_date:start,end_date:end,is_active:false});
+  setLoading('cs-btn',false);
+  if(error){ document.getElementById('s-alert').innerHTML=`<div class="alert alert-error">${error.message}</div>`; return; }
+  loadAtab('seasons');
+}
+async function adminToggleSeason(id,isActive){
+  if(!isActive){ await db.from('seasons').update({is_active:false}).neq('id','00000000-0000-0000-0000-000000000000'); }
+  await db.from('seasons').update({is_active:!isActive}).eq('id',id);
+  loadAtab('seasons');
+}
+
+// GAME WEEKS
+async function aGW(){
+  const { data: seasons }=await db.from('seasons').select('*').eq('is_active',true).limit(1);
+  const as=seasons?.[0];
+  const { data: gws }=as?await db.from('gameweeks').select('*').eq('season_id',as.id).order('opens_at',{ascending:false}):{data:[]};
+  return `<div class="card"><div class="card-header"><span class="card-title">Game Weeks${as?' — '+as.name:''}</span></div>
+    ${!as?'<div class="alert alert-warn">No active season. Activate one first.</div>':''}
+    <table class="admin-table"><thead><tr><th>Week</th><th>Opens</th><th>Closes</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      ${(gws||[]).map(g=>`<tr><td><strong>${g.name}</strong></td>
+        <td class="mono" style="font-size:11px;">${fmtDate(g.opens_at)}</td>
+        <td class="mono" style="font-size:11px;">${fmtDate(g.closes_at)}</td>
+        <td><span class="badge badge-${g.status==='open'?'open':g.status==='closed'?'closed':'scored'}">${g.status}</span></td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${g.status==='open'?`<button class="btn btn-sm btn-amber" onclick="adminSetGWStatus('${g.id}','closed')">Close Week</button>`:''}
+          ${g.status==='closed'?`<button class="btn btn-sm btn-outline" onclick="adminSetGWStatus('${g.id}','open')">Reopen</button>`:''}
+          <button class="btn btn-sm btn-danger" onclick="adminDeleteGW('${g.id}')">Delete</button>
+        </td>
+      </tr>`).join('')}
+    </tbody></table></div>
+  <div class="card"><div class="card-title" style="margin-bottom:14px;">New Game Week</div>
+    <div class="form-group"><label>Name</label><input id="gwname" placeholder="Game Week 3"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Opens At</label><input type="datetime-local" id="gwopens"></div>
+      <div class="form-group"><label>Closes At</label><input type="datetime-local" id="gwcloses"></div>
+    </div>
+    <button class="btn btn-lime" id="cgw-btn" onclick="adminCreateGW('${as?.id||''}')">Create Game Week</button>
+    <div id="gw-alert" style="margin-top:10px;"></div>
+  </div>`;
+}
+async function adminCreateGW(seasonId){
+  if(!seasonId){ document.getElementById('gw-alert').innerHTML='<div class="alert alert-error">No active season.</div>'; return; }
+  const name=document.getElementById('gwname').value.trim();
+  const opens=document.getElementById('gwopens').value;
+  const closes=document.getElementById('gwcloses').value;
+  if(!name||!opens||!closes){ document.getElementById('gw-alert').innerHTML='<div class="alert alert-error">All fields required.</div>'; return; }
+  if(new Date(closes)<=new Date(opens)){ document.getElementById('gw-alert').innerHTML='<div class="alert alert-error">Closes must be after opens.</div>'; return; }
+  setLoading('cgw-btn',true);
+  const { error }=await db.from('gameweeks').insert({season_id:seasonId,name,opens_at:opens,closes_at:closes,status:'open'});
+  setLoading('cgw-btn',false);
+  if(error){ document.getElementById('gw-alert').innerHTML=`<div class="alert alert-error">${error.message}</div>`; return; }
+  loadAtab('gameweeks');
+}
+async function adminSetGWStatus(id,status){ await db.from('gameweeks').update({status}).eq('id',id); loadAtab('gameweeks'); }
+async function adminDeleteGW(id){
+  if(!confirm('Delete this game week and all related data?')) return;
+  await db.from('gameweeks').delete().eq('id',id); loadAtab('gameweeks');
+}
+
+// FIXTURES
+async function aFixtures(){
+  const { data: seasons }=await db.from('seasons').select('*').eq('is_active',true).limit(1);
+  const as=seasons?.[0];
+  const [{ data: gws },{ data: fixtures }]=await Promise.all([
+    as?db.from('gameweeks').select('*').eq('season_id',as.id).order('opens_at'):{data:[]},
+    as?db.from('fixtures').select('*,gameweeks!inner(season_id,name)').eq('gameweeks.season_id',as.id).order('kickoff_at'):{data:[]}
+  ]);
+  const gwMap=Object.fromEntries((gws||[]).map(g=>[g.id,g]));
+  return `<div class="card"><div class="card-title" style="margin-bottom:14px;">Add Fixture</div>
+    <div class="form-group"><label>Game Week</label><select id="fxgw">${(gws||[]).map(g=>`<option value="${g.id}">${g.name} (${g.status})</option>`).join('')||'<option value="">No weeks</option>'}</select></div>
+    <div class="form-row">
+      <div class="form-group"><label>Home Team</label><input id="fxhome" placeholder="Gor Mahia"></div>
+      <div class="form-group"><label>Away Team</label><input id="fxaway" placeholder="Tusker FC"></div>
+    </div>
+    <div class="form-group"><label>Kickoff Date/Time</label><input type="datetime-local" id="fxko"></div>
+    <button class="btn btn-lime" id="cfx-btn" onclick="adminCreateFx()">Add Fixture</button>
+    <div id="fx-alert" style="margin-top:10px;"></div>
+  </div>
+  <div class="card"><div class="card-title" style="margin-bottom:14px;">All Fixtures</div>
+    <table class="admin-table"><thead><tr><th>Week</th><th>Match</th><th>Kickoff</th><th>Result</th><th></th></tr></thead><tbody>
+      ${(fixtures||[]).map(f=>`<tr>
+        <td style="font-size:11px;color:var(--muted);">${f.gameweeks?.name||'—'}</td>
+        <td><strong>${f.home_team}</strong> vs ${f.away_team}</td>
+        <td class="mono" style="font-size:11px;">${fmtDate(f.kickoff_at)}</td>
+        <td class="score-result">${f.result_entered?`${f.final_home_goals}–${f.final_away_goals}`:'—'}</td>
+        <td><button class="btn btn-sm btn-danger" onclick="adminDeleteFx('${f.id}')">✕</button></td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+}
+async function adminCreateFx(){
+  const gwId=document.getElementById('fxgw').value;
+  const home=document.getElementById('fxhome').value.trim();
+  const away=document.getElementById('fxaway').value.trim();
+  const ko=document.getElementById('fxko').value;
+  if(!gwId||!home||!away||!ko){ document.getElementById('fx-alert').innerHTML='<div class="alert alert-error">All fields required.</div>'; return; }
+  setLoading('cfx-btn',true);
+  const { error }=await db.from('fixtures').insert({gameweek_id:gwId,home_team:home,away_team:away,kickoff_at:ko,result_entered:false});
+  setLoading('cfx-btn',false);
+  if(error){ document.getElementById('fx-alert').innerHTML=`<div class="alert alert-error">${error.message}</div>`; return; }
+  loadAtab('fixtures');
+}
+async function adminDeleteFx(id){
+  if(!confirm('Delete this fixture?')) return;
+  await db.from('fixtures').delete().eq('id',id); loadAtab('fixtures');
+}
+
+// RESULTS
+async function aResults(){
+  const { data: seasons }=await db.from('seasons').select('*').eq('is_active',true).limit(1);
+  const as=seasons?.[0];
+  if(!as) return `<div class="alert alert-info">No active season.</div>`;
+  const { data: gws }=await db.from('gameweeks').select('*').eq('season_id',as.id).in('status',['closed','scored']).order('closes_at',{ascending:false});
+  if(!gws?.length) return `<div class="alert alert-info">No closed game weeks yet. Close a week first via the Game Weeks tab.</div>`;
+  const all=await Promise.all(gws.map(async gw=>{
+    const { data: fx }=await db.from('fixtures').select('*').eq('gameweek_id',gw.id).order('kickoff_at');
+    return {gw,fixtures:fx||[]};
+  }));
+  return all.map(({gw,fixtures})=>`<div class="card">
+    <div class="card-header"><span class="card-title">${gw.name}</span>
+      <span class="badge badge-${gw.status==='closed'?'closed':'scored'}">${gw.status}</span>
+    </div>
+    <table class="admin-table" style="margin-bottom:14px;"><thead><tr><th>Match</th><th>Home Goals</th><th>Away Goals</th><th>Saved</th></tr></thead><tbody>
+      ${fixtures.map(f=>`<tr>
+        <td><strong>${f.home_team}</strong> vs ${f.away_team}<br><span style="font-size:11px;color:var(--muted);">${fmtDate(f.kickoff_at)}</span></td>
+        <td><input type="number" id="rh-${f.id}" min="0" max="20" value="${f.final_home_goals??''}" placeholder="0" style="width:70px;text-align:center;"></td>
+        <td><input type="number" id="ra-${f.id}" min="0" max="20" value="${f.final_away_goals??''}" placeholder="0" style="width:70px;text-align:center;"></td>
+        <td class="score-result">${f.result_entered?`${f.final_home_goals}–${f.final_away_goals}`:'<span style="color:var(--muted);">Pending</span>'}</td>
+      </tr>`).join('')}
+    </tbody></table>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-amber" id="sr-${gw.id}" onclick="adminSaveResults('${gw.id}')">Save Results</button>
+      <button class="btn btn-lime" id="sw-${gw.id}" onclick="adminScoreWeek('${gw.id}')">⚡ Calculate & Score</button>
+    </div>
+    <div id="ra-${gw.id}" style="margin-top:10px;"></div>
+  </div>`).join('');
+}
+async function adminSaveResults(gwId){
+  setLoading('sr-'+gwId,true);
+  const { data: fixtures }=await db.from('fixtures').select('id').eq('gameweek_id',gwId);
+  let hasError=false;
+  for(const f of fixtures||[]){
+    const h=document.getElementById('rh-'+f.id)?.value;
+    const a=document.getElementById('ra-'+f.id)?.value;
+    if(h===''||a===''||h===undefined||a===undefined){ hasError=true; continue; }
+    await db.from('fixtures').update({final_home_goals:parseInt(h),final_away_goals:parseInt(a),result_entered:true}).eq('id',f.id);
+  }
+  setLoading('sr-'+gwId,false);
+  document.getElementById('ra-'+gwId).innerHTML=hasError
+    ?'<div class="alert alert-error">Some fixtures missing results — enter all scores.</div>'
+    :'<div class="alert alert-success">✓ Results saved! Click Calculate & Score to update points.</div>';
+}
+async function adminScoreWeek(gwId){
+  setLoading('sw-'+gwId,true);
+  try{
+    const { data: fixtures }=await db.from('fixtures').select('*').eq('gameweek_id',gwId).eq('result_entered',true);
+    if(!fixtures?.length){ document.getElementById('ra-'+gwId).innerHTML='<div class="alert alert-error">No results saved. Save results first.</div>'; return; }
+    const { data: slips }=await db.from('slips').select('*,predictions(*)').eq('gameweek_id',gwId);
+    for(const slip of slips||[]){
+      let total=0;
+      for(const pred of slip.predictions||[]){
+        const fx=fixtures.find(f=>f.id===pred.fixture_id); if(!fx) continue;
+        const pts=calcPoints(pred,fx);
+        await db.from('predictions').update({points_awarded:pts,scored:true}).eq('id',pred.id);
+        total+=pts;
+      }
+      await db.from('slips').update({points_total:total}).eq('id',slip.id);
+    }
+    await db.from('gameweeks').update({status:'scored'}).eq('id',gwId);
+    document.getElementById('ra-'+gwId).innerHTML=`<div class="alert alert-success">✓ Week scored! ${slips?.length||0} slips processed. Leaderboard updated.</div>`;
+  }catch(e){ document.getElementById('ra-'+gwId).innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
+  finally{ setLoading('sw-'+gwId,false); }
+}
+function calcPoints(pred,fx){
+  const hg=fx.final_home_goals, ag=fx.final_away_goals, total=hg+ag;
+  if(pred.market_type==='1X2'){ const actual=hg>ag?'home':ag>hg?'away':'draw'; return pred.selection_value===actual?3:0; }
+  if(pred.market_type==='GOALS'){ const[dir,thresh]=pred.selection_value.split('_'); const t=parseFloat(thresh); return(dir==='over'?total>t:total<t)?3:0; }
+  if(pred.market_type==='SCORE'){ const[ph,pa]=pred.selection_value.split('-').map(Number); return ph===hg&&pa===ag?10:0; }
+  return 0;
+}
+
+// USERS
+async function aUsers(){
+  const { data: users }=await db.from('users').select('*').order('created_at');
+  return `<div class="card"><div class="card-title" style="margin-bottom:14px;">User Management</div>
+    <table class="admin-table"><thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead><tbody>
+      ${(users||[]).map(u=>`<tr>
+        <td><strong>${u.username}</strong></td>
+        <td style="font-size:12px;color:var(--muted);">${u.email||'—'}</td>
+        <td><span class="badge badge-${u.role==='admin'?'admin':'pending'}">${u.role}</span></td>
+        <td><span class="badge badge-${u.active?'open':'closed'}">${u.active?'Active':'Deactivated'}</span></td>
+        <td style="font-size:11px;color:var(--muted);">${fmtDate(u.created_at)}</td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${u.id!==currentUser.id?`<button class="btn btn-sm ${u.active?'btn-danger':'btn-lime'}" onclick="adminToggleUser('${u.id}',${u.active})">${u.active?'Deactivate':'Activate'}</button>`:'<span style="color:var(--muted);font-size:11px;">You</span>'}
+          ${u.id!==currentUser.id?`<button class="btn btn-sm btn-outline" onclick="adminResetPwd('${u.id}','${u.username}')">Reset Pwd</button>`:''}
+        </td>
+      </tr>`).join('')}
+    </tbody></table>
+    <div style="margin-top:12px;font-size:12px;color:var(--muted);">💡 To reset a user's password, click Reset Pwd and enter a temporary password, then tell the user to log in and change it.</div>
+  </div>`;
+}
+async function adminToggleUser(id,isActive){ await db.from('users').update({active:!isActive}).eq('id',id); loadAtab('users'); }
+async function adminResetPwd(id,username){
+  const newPwd=prompt(`Reset password for ${username}.\nEnter a new temporary password (min 6 chars):`);
+  if(!newPwd){ return; }
+  if(newPwd.length<6){ alert('Password too short (min 6 characters).'); return; }
+  const hash=await hashPwd(newPwd);
+  const { error }=await db.from('users').update({password_hash:hash}).eq('id',id);
+  if(error){ alert('Failed: '+error.message); return; }
+  alert(`✓ Password for ${username} has been reset to the temporary password you entered.\nTell them to log in and remember it.`);
+}
+
+// ── START ────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
