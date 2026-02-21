@@ -334,7 +334,7 @@ function authAlert(msg,type='error') {
 // ── INIT ────────────────────────────────────────────────
 async function init() {
   // Validate credentials are set
-  if (!SUPABASE_URL || SUPABASE_URL === 'https://cuqrtdilltdlzcgmopty.supabase.co') {
+  if (!SUPABASE_URL || SUPABASE_URL === 'YOUR_SUPABASE_URL') {
     document.getElementById('loading-screen').innerHTML = `
       <div style="max-width:500px;padding:32px;background:var(--card);border:2px solid var(--amber);border-radius:14px;margin:20px;text-align:left;">
         <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--amber);margin-bottom:12px;">⚙️ Setup Required</div>
@@ -343,7 +343,7 @@ async function init() {
         </p>
         <code style="display:block;background:#111;padding:14px;border-radius:8px;font-size:12px;color:var(--lime);line-height:2;">
           const SUPABASE_URL = '<span style="color:var(--amber);">https://xxxx.supabase.co</span>';<br>
-          const SUPABASE_ANON_KEY = '<span style="color:var(--amber);">sb_publishable_f2GL2gBnHCvVVxmSHKd8PA_7oqyoxTc</span>';
+          const SUPABASE_ANON_KEY = '<span style="color:var(--amber);">your-anon-key-here</span>';
         </code>
         <p style="color:var(--muted);font-size:12px;margin-top:12px;">Then save the file, upload to GitHub, done. Users will never see this screen.</p>
       </div>`;
