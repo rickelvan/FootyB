@@ -127,7 +127,7 @@
   .hero-banner-content{position:relative;}
   .hero-title{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:3px;color:var(--lime);margin-bottom:4px;}
   .hero-sub{color:var(--muted);font-size:13px;}
-  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;}
+  .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px;}
   @media(max-width:500px){.stat-grid{grid-template-columns:repeat(2,1fr);}}
   .stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;}
   .stat-val{font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--lime);}
@@ -336,7 +336,6 @@ function authAlert(msg,type='error') {
 
 // ── INIT ────────────────────────────────────────────────
 async function init() {
-  // Validate credentials are set
   if (!SUPABASE_URL || SUPABASE_URL === 'YOUR_SUPABASE_URL') {
     document.getElementById('loading-screen').innerHTML = `
       <div style="max-width:500px;padding:32px;background:var(--card);border:2px solid var(--amber);border-radius:14px;margin:20px;text-align:left;">
@@ -348,7 +347,7 @@ async function init() {
           const SUPABASE_URL = '<span style="color:var(--amber);">https://xxxx.supabase.co</span>';<br>
           const SUPABASE_ANON_KEY = '<span style="color:var(--amber);">your-anon-key-here</span>';
         </code>
-        <p style="color:var(--muted);font-size:12px;margin-top:12px;">Then save the file, upload to GitHub, done. Users will never see this screen.</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:12px;">Then save the file, upload to GitHub, done.</p>
       </div>`;
     return;
   }
@@ -362,19 +361,16 @@ async function init() {
 
     setLoadingMsg('Ready!');
 
-    // Check if any users exist at all
     const { data: anyUsers } = await db.from('users').select('id').limit(1);
     if (!anyUsers?.length) {
       hide('loading-screen'); show('setup-screen'); return;
     }
 
-    // Check for saved session
     const savedId = localStorage.getItem('tp_uid') || sessionStorage.getItem('tp_uid');
     if (savedId) {
       const { data: u } = await db.from('users').select('*').eq('id', savedId).eq('active', true).limit(1);
       if (u?.[0]) { currentUser=u[0]; hide('loading-screen'); showApp(); return; }
     }
-    // Clear stale session
     localStorage.removeItem('tp_uid'); sessionStorage.removeItem('tp_uid');
     hide('loading-screen'); show('auth-screen');
 
@@ -383,7 +379,7 @@ async function init() {
       <div style="max-width:480px;padding:24px;text-align:center;">
         <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--red);margin-bottom:12px;">Connection Failed</div>
         <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">${e.message}</p>
-        <p style="color:var(--muted);font-size:12px;">Check your Supabase URL and anon key in the HTML file, and make sure you ran the SQL setup script.</p>
+        <p style="color:var(--muted);font-size:12px;">Check your Supabase URL and anon key, and make sure you ran the SQL setup script.</p>
         <button class="btn btn-outline" style="margin-top:16px;" onclick="location.reload()">Try Again</button>
       </div>`;
   }
@@ -456,7 +452,6 @@ async function doLogin() {
   if(!input||!password) return authAlert('Please fill all fields.');
   setLoading('login-btn',true);
   try {
-    // Support login by username OR email
     const isEmail=input.includes('@');
     const query=isEmail
       ? db.from('users').select('*').ilike('email',input).limit(1)
@@ -481,19 +476,14 @@ async function doForgotPassword() {
   if(!email) return authAlert('Enter your email address.');
   setLoading('reset-btn',true);
   try {
-    // Check user exists with this email
     const { data: users }=await db.from('users').select('id,email').ilike('email',email).limit(1);
     if(!users?.length) {
       authAlert('No account found with that email. Try a different address or register.');
       return;
     }
-    // Use Supabase auth magic link — works even with custom auth table since
-    // we're just sending an email; user clicks link which brings them back
-    // to a password reset page we handle
     const { error }=await db.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.href+'?reset=1'
     });
-    // Even if supabase auth isn't fully set up, tell user to contact admin
     authAlert('If your email is registered, a reset link has been sent. Check your inbox (and spam folder).<br><br>If you don\'t receive it within a few minutes, ask your admin to reset your password manually.','success');
   } catch(e) {
     authAlert('Could not send reset email. Please ask your admin to reset your password.');
@@ -603,10 +593,9 @@ function renderPage(page) {
 // ══════════════════════════════════════════════════════
 async function renderHome(container) {
   try {
-    const [{ data: seasons },{ data: mySlips },{ data: preds }]=await Promise.all([
+    const [{ data: seasons },{ data: mySlips }]=await Promise.all([
       db.from('seasons').select('*').order('created_at',{ascending:false}),
-      db.from('slips').select('*').eq('user_id',currentUser.id),
-      db.from('predictions').select('*,slips!inner(user_id)').eq('slips.user_id',currentUser.id)
+      db.from('slips').select('*').eq('user_id',currentUser.id)
     ]);
     const activeSeason=seasons?.find(s=>s.is_active);
     let openWeek=null, openFixtures=[], myOpenSlip=null;
@@ -622,9 +611,8 @@ async function renderHome(container) {
       }
     }
     const totalPts=(mySlips||[]).reduce((a,s)=>a+(s.points_total||0),0);
-    const correct=(preds||[]).filter(p=>p.points_awarded>0&&p.scored).length;
 
-    // Recent scored weeks
+
     let recentHTML='';
     if(activeSeason) {
       const { data: scored }=await db.from('gameweeks').select('*').eq('season_id',activeSeason.id).eq('status','scored').order('closes_at',{ascending:false}).limit(3);
@@ -649,7 +637,6 @@ async function renderHome(container) {
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-val">${totalPts}</div><div class="stat-lbl">Season Points</div></div>
         <div class="stat-card"><div class="stat-val">${(mySlips||[]).length}</div><div class="stat-lbl">Slips Submitted</div></div>
-        <div class="stat-card"><div class="stat-val">${correct}</div><div class="stat-lbl">Correct Picks</div></div>
       </div>
       <div class="section-title">Current Week</div>
       ${openWeek?`<div class="card">
@@ -753,7 +740,13 @@ function setMarketTab(fId,tab) {
   if(f){ const el=document.getElementById('fp-'+fId); if(el) el.outerHTML=renderFixturePredict(f); }
 }
 function selectPrediction(fId,market,val) {
-  pendingPredictions[fId]={market_type:market,selection_value:val};
+  const existing=pendingPredictions[fId];
+  // Tap the already-selected option again → clear it
+  if(existing&&existing.market_type===market&&existing.selection_value===val) {
+    delete pendingPredictions[fId];
+  } else {
+    pendingPredictions[fId]={market_type:market,selection_value:val};
+  }
   const f=currentFixtures.find(x=>x.id===fId);
   if(f){ const el=document.getElementById('fp-'+fId); if(el) el.outerHTML=renderFixturePredict(f); }
 }
@@ -774,7 +767,6 @@ async function submitSlip() {
   }
   setLoading('submit-slip-btn',true);
   try {
-    // Re-check week is still open server-side before saving
     const { data: gwCheck } = await db.from('gameweeks').select('status').eq('id', currentGWId).single();
     if (!gwCheck || gwCheck.status !== 'open') {
       document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">⛔ This week has been closed by the admin. No more predictions can be submitted.</div>`;
@@ -832,8 +824,6 @@ async function renderMySlips(container) {
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Submitted: ${fmtDate(slip.submitted_at)}</div>
           ${preds.map(pred=>{
             const f=pred.fixtures; if(!f) return '';
-            // Recalculate correctness client-side from fixture result
-            // This ensures display is always accurate even if DB scoring is stale
             let livePoints = pred.points_awarded;
             if(scored && f.result_entered) {
               livePoints = calcPoints(pred, f);
@@ -962,7 +952,10 @@ async function aSeasons(){
     <table class="admin-table"><thead><tr><th>Name</th><th>Start</th><th>End</th><th>Status</th><th></th></tr></thead><tbody>
       ${(seasons||[]).map(s=>`<tr><td><strong>${s.name}</strong></td><td>${s.start_date}</td><td>${s.end_date}</td>
         <td>${s.is_active?'<span class="badge badge-open">Active</span>':'<span class="badge badge-pending">Inactive</span>'}</td>
-        <td><button class="btn btn-sm ${s.is_active?'btn-outline':'btn-lime'}" onclick="adminToggleSeason('${s.id}',${s.is_active})">${s.is_active?'Deactivate':'Activate'}</button></td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-sm ${s.is_active?'btn-outline':'btn-lime'}" onclick="adminToggleSeason('${s.id}',${s.is_active})">${s.is_active?'Deactivate':'Activate'}</button>
+          <button class="btn btn-sm btn-outline" onclick="adminRenameSeason('${s.id}','${s.name.replace(/'/g, "\\'")}')">✏ Rename</button>
+        </td>
       </tr>`).join('')}
     </tbody></table></div>
   <div class="card"><div class="card-title" style="margin-bottom:14px;">New Season</div>
@@ -991,6 +984,15 @@ async function adminToggleSeason(id,isActive){
   await db.from('seasons').update({is_active:!isActive}).eq('id',id);
   loadAtab('seasons');
 }
+async function adminRenameSeason(id, currentName) {
+  const newName = prompt('Rename season:', currentName);
+  if (newName === null) return; // cancelled
+  if (!newName.trim()) { alert('Name cannot be empty.'); return; }
+  if (newName.trim() === currentName) return; // no change
+  const { error } = await db.from('seasons').update({ name: newName.trim() }).eq('id', id);
+  if (error) { alert('Failed to rename: ' + error.message); return; }
+  loadAtab('seasons');
+}
 
 // GAME WEEKS
 async function aGW(){
@@ -1007,6 +1009,7 @@ async function aGW(){
         <td style="display:flex;gap:6px;flex-wrap:wrap;">
           ${g.status==='open'?`<button class="btn btn-sm btn-amber" onclick="adminSetGWStatus('${g.id}','closed')">Close Week</button>`:''}
           ${g.status==='closed'?`<button class="btn btn-sm btn-outline" onclick="adminSetGWStatus('${g.id}','open')">Reopen</button>`:''}
+          <button class="btn btn-sm btn-outline" onclick="adminRenameGW('${g.id}','${g.name.replace(/'/g, "\\'")}')">✏ Rename</button>
           <button class="btn btn-sm btn-danger" onclick="adminDeleteGW('${g.id}')">Delete</button>
         </td>
       </tr>`).join('')}
@@ -1035,6 +1038,19 @@ async function adminCreateGW(seasonId){
   loadAtab('gameweeks');
 }
 async function adminSetGWStatus(id,status){ await db.from('gameweeks').update({status}).eq('id',id); loadAtab('gameweeks'); }
+
+// ── NEW: RENAME GAME WEEK ────────────────────────────────
+async function adminRenameGW(id, currentName) {
+  const newName = prompt('Rename game week:', currentName);
+  if (newName === null) return; // user cancelled
+  if (!newName.trim()) { alert('Name cannot be empty.'); return; }
+  if (newName.trim() === currentName) return; // no change made
+  const { error } = await db.from('gameweeks').update({ name: newName.trim() }).eq('id', id);
+  if (error) { alert('Failed to rename: ' + error.message); return; }
+  loadAtab('gameweeks');
+}
+// ────────────────────────────────────────────────────────
+
 async function adminDeleteGW(id){
   if(!confirm('Delete this game week and all related data?')) return;
   await db.from('gameweeks').delete().eq('id',id); loadAtab('gameweeks');
@@ -1154,7 +1170,6 @@ async function adminScoreWeek(gwId){
   finally{ setLoading('sw-'+gwId,false); }
 }
 function calcPoints(pred,fx){
-  // Force integers — Supabase can return strings depending on query type
   const hg=parseInt(fx.final_home_goals), ag=parseInt(fx.final_away_goals), total=hg+ag;
   if(pred.market_type==='1X2'){
     const actual=hg>ag?'home':ag>hg?'away':'draw';
