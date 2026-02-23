@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>FootyBet</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -700,7 +703,7 @@ async function renderPredict(container) {
           ${mySlip?`<span class="badge badge-open">Slip submitted — editing allowed</span>`:`<span class="badge badge-closed">No slip yet</span>`}
         </div>
       </div>
-      <div class="alert alert-info" style="margin-bottom:16px;">Choose <strong>one market per match</strong>. You can edit until the week closes.</div>
+      <div class="alert alert-info" style="margin-bottom:16px;">Pick the games you want to predict. You don't have to predict all — choose <strong>one market per match</strong> for any games you want. You can edit until the week closes.</div>
       <div id="fixtures-predict">${currentFixtures.map(f=>renderFixturePredict(f)).join('')}</div>
       <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn btn-lime" id="submit-slip-btn" onclick="submitSlip()">${mySlip?'💾 Update Slip':'✓ Submit Slip'}</button>
@@ -764,10 +767,9 @@ function confirmScore(fId) {
 }
 
 async function submitSlip() {
-  const missing=currentFixtures.filter(f=>!pendingPredictions[f.id]);
-  if(missing.length){
-    document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">⚠ Make a prediction for all ${currentFixtures.length} fixtures. Missing: ${missing.map(f=>f.home_team+' vs '+f.away_team).join(', ')}</div>`;
-    missing.forEach(f=>{ const el=document.getElementById('fp-'+f.id); if(el) el.style.border='1px solid var(--red)'; });
+  const selected=currentFixtures.filter(f=>pendingPredictions[f.id]);
+  if(!selected.length){
+    document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">⚠ Make at least one prediction before submitting.</div>`;
     return;
   }
   setLoading('submit-slip-btn',true);
@@ -790,10 +792,12 @@ async function submitSlip() {
       await db.from('slips').update({submitted_at:now}).eq('id',slipId);
       await db.from('predictions').delete().eq('slip_id',slipId);
     }
-    const { error:pe }=await db.from('predictions').insert(currentFixtures.map(f=>({
-      slip_id:slipId, fixture_id:f.id, market_type:pendingPredictions[f.id].market_type,
-      selection_value:pendingPredictions[f.id].selection_value, points_awarded:0, scored:false
-    })));
+    const { error:pe }=await db.from('predictions').insert(
+      currentFixtures.filter(f=>pendingPredictions[f.id]).map(f=>({
+        slip_id:slipId, fixture_id:f.id, market_type:pendingPredictions[f.id].market_type,
+        selection_value:pendingPredictions[f.id].selection_value, points_awarded:0, scored:false
+      }))
+    );
     if(pe) throw pe;
     document.getElementById('predict-alert').innerHTML=`<div class="alert alert-success">✓ Slip ${currentSlipId?'updated':'submitted'} successfully! Good luck 🍀</div>`;
     document.getElementById('submit-slip-btn').dataset.orig='💾 Update Slip';
