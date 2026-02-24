@@ -311,6 +311,7 @@ let currentSlipId = null;
 let currentFixtures = [];
 let mySlipsCache = [];
 let adminTab = 'seasons';
+let predictFocusGWId = null;
 
 // ── UTILS ──────────────────────────────────────────────
 function show(id) { const el=document.getElementById(id); if(el) el.style.display=id==='main-app'?'flex':''; }
@@ -689,13 +690,52 @@ async function renderPredict(container) {
     const { data: seasons }=await db.from('seasons').select('*').eq('is_active',true).limit(1);
     const activeSeason=seasons?.[0];
     if(!activeSeason){ container.innerHTML=`<div class="alert alert-info">No active season.</div>`; return; }
-    const { data: gws }=await db.from('gameweeks').select('*').eq('season_id',activeSeason.id).eq('status','open').order('opens_at',{ascending:false}).limit(1);
-    const openWeek=gws?.[0];
-    if(!openWeek){ container.innerHTML=`<div class="alert alert-info">No open game week. Come back when predictions open!</div>`; return; }
-    currentGWId=openWeek.id;
+
+    // Load all weeks + this user's overrides so they can switch between
+    // current open week(s) and any closed weeks explicitly unlocked for them.
+    const [{ data: gws },{ data: overrides }] = await Promise.all([
+      db.from('gameweeks').select('*').eq('season_id',activeSeason.id),
+      db.from('slip_edit_overrides').select('gameweek_id,expires_at').eq('user_id',currentUser.id)
+    ]);
+    const now=new Date();
+    const allGws=gws||[];
+    const openWeeks=allGws.filter(g=>g.status==='open')
+      .sort((a,b)=>new Date(b.opens_at)-new Date(a.opens_at));
+    const overrideGwIds=(overrides||[])
+      .filter(o=>!o.expires_at||new Date(o.expires_at)>now)
+      .map(o=>o.gameweek_id);
+    const overrideWeeks=allGws.filter(g=>g.status==='closed'&&overrideGwIds.includes(g.id))
+      .sort((a,b)=>new Date(b.closes_at)-new Date(a.closes_at));
+    const candidates=[...openWeeks,...overrideWeeks];
+
+    let targetWeek=null;
+    let isOverrideWeek=false;
+
+    if(predictFocusGWId){
+      targetWeek=candidates.find(g=>g.id===predictFocusGWId)||null;
+    }
+    if(!targetWeek){
+      targetWeek=candidates[0]||null;
+    }
+    if(!targetWeek){
+      container.innerHTML=`<div class="alert alert-info">No open game week right now.${currentUser.role==='admin'?' Use the Admin → Game Weeks tab to open or close weeks, or grant overrides for closed weeks.':''}</div>`;
+      return;
+    }
+    isOverrideWeek=overrideWeeks.some(g=>g.id===targetWeek.id);
+    predictFocusGWId=targetWeek.id;
+    currentGWId=targetWeek.id;
+
+    const hasAltWeeks=candidates.length>1;
+    const switcherHtml=hasAltWeeks
+      ? `<div style="margin-bottom:8px;font-size:12px;color:var(--muted);">
+          Viewing: <strong>${targetWeek.name}</strong> (${isOverrideWeek?'override on closed week':'open week'})
+          ${candidates.map(g=>g.id===targetWeek.id?''
+            :`<button class="btn btn-sm btn-outline" style="margin-left:6px;margin-top:4px;" onclick="setPredictWeek('${g.id}')">Switch to ${g.name}</button>`).join('')}
+        </div>`
+      : '';
     const [{ data: fixtures },{ data: mySlips }]=await Promise.all([
-      db.from('fixtures').select('*').eq('gameweek_id',openWeek.id).order('kickoff_at'),
-      db.from('slips').select('*,predictions(*)').eq('user_id',currentUser.id).eq('gameweek_id',openWeek.id).limit(1)
+      db.from('fixtures').select('*').eq('gameweek_id',targetWeek.id).order('kickoff_at'),
+      db.from('slips').select('*,predictions(*)').eq('user_id',currentUser.id).eq('gameweek_id',targetWeek.id).limit(1)
     ]);
     currentFixtures=fixtures||[];
     if(!currentFixtures.length){ container.innerHTML=`<div class="alert alert-info">No fixtures posted for this week yet.</div>`; return; }
@@ -703,7 +743,8 @@ async function renderPredict(container) {
     if(mySlip){ currentSlipId=mySlip.id; (mySlip.predictions||[]).forEach(p=>{ pendingPredictions[p.fixture_id]={market_type:p.market_type,selection_value:p.selection_value}; activeMarketTab[p.fixture_id]=p.market_type; }); }
 
     container.innerHTML=`
-      <div class="section-title">⚽ ${openWeek.name} — Predictions</div>
+      <div class="section-title">⚽ ${targetWeek.name} — Predictions</div>
+      ${switcherHtml}
       <div class="load-code-section">
         <div class="card-title" style="font-size:15px;margin-bottom:6px;">📥 Load Booking Code</div>
         <p style="font-size:12px;color:var(--muted);">Paste a shared booking code to load someone else's slip. You can place it as-is or make adjustments.</p>
@@ -716,12 +757,15 @@ async function renderPredict(container) {
       <div class="card" style="margin-bottom:16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
           <div><div style="font-size:12px;color:var(--muted);">Closes</div>
-            <div style="font-weight:600;color:var(--amber);">${fmtDate(openWeek.closes_at)} &nbsp;<span class="countdown">(${fmtCountdown(openWeek.closes_at)} left)</span></div>
+            <div style="font-weight:600;color:var(--amber);">${fmtDate(targetWeek.closes_at)} &nbsp;<span class="countdown">(${fmtCountdown(targetWeek.closes_at)} left)</span></div>
           </div>
-          ${mySlip?`<span class="badge badge-open">Slip submitted — editing allowed</span>`:`<span class="badge badge-closed">No slip yet</span>`}
+          ${mySlip
+            ?`<span class="badge ${isOverrideWeek?'badge-closed':'badge-open'}">${isOverrideWeek?'Closed week — override active':'Slip submitted — editing allowed'}</span>`
+            :`<span class="badge badge-closed">${isOverrideWeek?'Closed week — no slip yet':'No slip yet'}</span>`}
         </div>
       </div>
       <div class="alert alert-info" style="margin-bottom:16px;">Pick the games you want to predict. You don't have to predict all — choose <strong>one market per match</strong> for any games you want. You can edit until the week closes.</div>
+      ${isOverrideWeek?'<div class="alert alert-warn" style="margin-bottom:16px;">An admin has temporarily unlocked this closed week so you can create or edit your slip. Other players cannot change their slips.</div>':''}
       <div id="fixtures-predict">${currentFixtures.map(f=>renderFixturePredict(f)).join('')}</div>
       <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
         <button class="btn btn-lime" id="submit-slip-btn" onclick="submitSlip()">${mySlip?'💾 Update Slip':'✓ Submit Slip'}</button>
@@ -729,6 +773,11 @@ async function renderPredict(container) {
       </div>
       <div id="predict-alert" style="margin-top:14px;"></div>`;
   } catch(e){ container.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
+}
+
+function setPredictWeek(gwId){
+  predictFocusGWId=gwId;
+  renderPage('predict');
 }
 
 function renderFixturePredict(f) {
@@ -881,12 +930,34 @@ async function submitSlip() {
   setLoading('submit-slip-btn',true);
   try {
     const { data: gwCheck } = await db.from('gameweeks').select('status').eq('id', currentGWId).single();
-    if (!gwCheck || gwCheck.status !== 'open') {
-      document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">⛔ This week has been closed by the admin. No more predictions can be submitted.</div>`;
+    if (!gwCheck) {
+      document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">⛔ This game week no longer exists.</div>`;
       setLoading('submit-slip-btn',false);
       setTimeout(() => renderPage('predict'), 2000);
       return;
     }
+
+    let canEdit = gwCheck.status === 'open';
+    if (!canEdit) {
+      const { data: overrides } = await db.from('slip_edit_overrides')
+        .select('id,expires_at')
+        .eq('user_id', currentUser.id)
+        .eq('gameweek_id', currentGWId)
+        .limit(1);
+      const ov = overrides?.[0];
+      if (ov) {
+        const expOk = !ov.expires_at || new Date(ov.expires_at) > new Date();
+        if (expOk) canEdit = true;
+      }
+    }
+
+    if (!canEdit) {
+      document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">⛔ This week has been closed by the admin and you don't have permission to edit slips anymore.</div>`;
+      setLoading('submit-slip-btn',false);
+      setTimeout(() => renderPage('predict'), 2000);
+      return;
+    }
+
     const now=new Date().toISOString();
     let slipId=currentSlipId;
     if(!slipId){
@@ -1038,8 +1109,8 @@ async function renderAdmin(container) {
   if(currentUser.role!=='admin'){ container.innerHTML=`<div class="alert alert-error">Access denied.</div>`; return; }
   container.innerHTML=`<div class="section-title">⚙️ Admin Dashboard</div>
     <div class="nav-tabs" style="margin-bottom:16px;border-radius:8px;">
-      ${['seasons','gameweeks','fixtures','results','users'].map(t=>
-        `<button class="nav-tab ${adminTab===t?'active':''}" onclick="setAdminTab('${t}')">${{seasons:'🏆 Seasons',gameweeks:'📅 Weeks',fixtures:'⚽ Fixtures',results:'📊 Results',users:'👥 Users'}[t]}</button>`
+      ${['seasons','gameweeks','fixtures','results','users','overrides'].map(t=>
+        `<button class="nav-tab ${adminTab===t?'active':''}" onclick="setAdminTab('${t}')">${{seasons:'🏆 Seasons',gameweeks:'📅 Weeks',fixtures:'⚽ Fixtures',results:'📊 Results',users:'👥 Users',overrides:'🔓 Overrides'}[t]}</button>`
       ).join('')}
     </div>
     <div id="atab"><div style="text-align:center;padding:30px;"><div class="spinner"></div></div></div>`;
@@ -1059,6 +1130,7 @@ async function loadAtab(tab){
     else if(tab==='fixtures') el.innerHTML=await aFixtures();
     else if(tab==='results') el.innerHTML=await aResults();
     else if(tab==='users') el.innerHTML=await aUsers();
+    else if(tab==='overrides') el.innerHTML=await aOverrides();
   }catch(e){ el.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
 }
 
@@ -1333,6 +1405,97 @@ async function adminResetPwd(id,username){
   const { error }=await db.from('users').update({password_hash:hash}).eq('id',id);
   if(error){ alert('Failed: '+error.message); return; }
   alert(`✓ Password for ${username} has been reset to the temporary password you entered.\nTell them to log in and remember it.`);
+}
+
+// SLIP EDIT OVERRIDES
+async function aOverrides(){
+  const { data: seasons }=await db.from('seasons').select('*').eq('is_active',true).limit(1);
+  const as=seasons?.[0];
+  if(!as) return `<div class="alert alert-info">No active season. Activate one first.</div>`;
+  const [{ data: gws },{ data: users },{ data: overrides }]=await Promise.all([
+    db.from('gameweeks').select('*').eq('season_id',as.id).order('closes_at',{ascending:false}),
+    db.from('users').select('*').order('username'),
+    db.from('slip_edit_overrides').select('*').order('created_at',{ascending:false})
+  ]);
+  const closedGws=(gws||[]).filter(g=>g.status==='closed');
+  const userMap=Object.fromEntries((users||[]).map(u=>[u.id,u]));
+  const gwMap=Object.fromEntries((gws||[]).map(g=>[g.id,g]));
+  const rowsHtml=(overrides||[]).map(o=>{
+    const u=userMap[o.user_id];
+    const gw=gwMap[o.gameweek_id];
+    if(!u||!gw) return '';
+    const exp=o.expires_at?fmtDate(o.expires_at):'No expiry';
+    return `<tr>
+      <td><strong>${gw.name}</strong><br><span style="font-size:11px;color:var(--muted);">${gw.status}</span></td>
+      <td>${u.username}</td>
+      <td style="font-size:11px;color:var(--muted);">${exp}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="adminRemoveOverride('${o.id}')">Remove</button></td>
+    </tr>`;
+  }).filter(Boolean).join('');
+  const bodyHtml=rowsHtml||`<tr><td colspan="4" style="font-size:12px;color:var(--muted);padding:10px;">No overrides set.</td></tr>`;
+  return `<div class="card">
+    <div class="card-title" style="margin-bottom:14px;">Grant Temporary Edit Access</div>
+    ${!closedGws.length?'<div class="alert alert-info">There are no closed game weeks in the active season.</div>':''}
+    <div class="form-row">
+      <div class="form-group">
+        <label>Game Week (closed)</label>
+        <select id="ov-gw">
+          ${closedGws.map(g=>`<option value="${g.id}">${g.name}</option>`).join('')||'<option value="">No closed weeks</option>'}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>User</label>
+        <select id="ov-user">
+          ${(users||[]).map(u=>`<option value="${u.id}">${u.username} (${u.role})</option>`).join('')||'<option value="">No users</option>'}
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Expires At (optional)</label>
+      <input type="datetime-local" id="ov-expires">
+    </div>
+    <button class="btn btn-lime" id="ov-add-btn" onclick="adminAddOverride()">Grant Access</button>
+    <div id="ov-alert" style="margin-top:10px;"></div>
+  </div>
+  <div class="card" style="margin-top:14px;">
+    <div class="card-title" style="margin-bottom:14px;">Current Overrides</div>
+    <table class="admin-table">
+      <thead><tr><th>Game Week</th><th>User</th><th>Expires</th><th></th></tr></thead>
+      <tbody>${bodyHtml}</tbody>
+    </table>
+  </div>`;
+}
+async function adminAddOverride(){
+  const gwSel=document.getElementById('ov-gw');
+  const userSel=document.getElementById('ov-user');
+  const expInput=document.getElementById('ov-expires');
+  const alertEl=document.getElementById('ov-alert');
+  const gwId=gwSel?.value||'';
+  const userId=userSel?.value||'';
+  const exp=expInput?.value||'';
+  if(!gwId||!userId){
+    alertEl.innerHTML='<div class="alert alert-error">Select both a game week and a user.</div>';
+    return;
+  }
+  setLoading('ov-add-btn',true);
+  try{
+    await db.from('slip_edit_overrides').delete().eq('user_id',userId).eq('gameweek_id',gwId);
+    const payload={gameweek_id:gwId,user_id:userId,created_by:currentUser.id};
+    if(exp) payload.expires_at=exp;
+    const { error }=await db.from('slip_edit_overrides').insert(payload);
+    if(error) throw error;
+    alertEl.innerHTML='<div class="alert alert-success">✓ Override granted. This user can now edit their slip for that closed week.</div>';
+    loadAtab('overrides');
+  }catch(e){
+    alertEl.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`;
+  }finally{
+    setLoading('ov-add-btn',false);
+  }
+}
+async function adminRemoveOverride(id){
+  if(!confirm('Remove this override? The user will no longer be able to edit their slip for that closed week.')) return;
+  await db.from('slip_edit_overrides').delete().eq('id',id);
+  loadAtab('overrides');
 }
 
 // ── START ────────────────────────────────────────────────
