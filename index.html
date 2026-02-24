@@ -145,6 +145,14 @@
   .divider::before,.divider::after{content:'';flex:1;border-top:1px solid var(--border);}
   .link-btn{background:none;border:none;color:var(--lime);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;text-decoration:underline;padding:0;}
   .countdown{font-family:'DM Mono',monospace;font-size:13px;color:var(--amber);}
+  /* MODAL */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+  .modal-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:420px;width:100%;}
+  .modal-title{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--lime);margin-bottom:12px;}
+  .booking-code-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:'DM Mono',monospace;font-size:13px;word-break:break-all;color:var(--text);margin:12px 0;position:relative;}
+  .load-code-section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:20px;}
+  .load-code-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  .load-code-row input{flex:1;min-width:0;}
 </style>
 </head>
 <body>
@@ -257,6 +265,19 @@
   </div>
 </div>
 
+<!-- SHARE SLIP MODAL -->
+<div id="share-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-title">📤 Share Slip</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">Share this 6-character code with friends. They can paste it under "Load Booking Code" to use your predictions.</p>
+    <div class="booking-code-box" id="share-code-display">—</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-lime" onclick="copyBookingCode()">📋 Copy Code</button>
+      <button class="btn btn-outline" onclick="closeShareModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- MAIN APP -->
 <div id="main-app" style="display:none;flex-direction:column;min-height:100vh;">
   <div class="topbar">
@@ -288,6 +309,7 @@ let activeMarketTab = {};
 let currentGWId = null;
 let currentSlipId = null;
 let currentFixtures = [];
+let mySlipsCache = [];
 let adminTab = 'seasons';
 
 // ── UTILS ──────────────────────────────────────────────
@@ -682,6 +704,15 @@ async function renderPredict(container) {
 
     container.innerHTML=`
       <div class="section-title">⚽ ${openWeek.name} — Predictions</div>
+      <div class="load-code-section">
+        <div class="card-title" style="font-size:15px;margin-bottom:6px;">📥 Load Booking Code</div>
+        <p style="font-size:12px;color:var(--muted);">Paste a shared booking code to load someone else's slip. You can place it as-is or make adjustments.</p>
+        <div class="load-code-row">
+          <input type="text" id="load-code-input" placeholder="e.g. B227XC" maxlength="6" oninput="this.value=this.value.toUpperCase()" style="font-family:'DM Mono',monospace;text-transform:uppercase;">
+          <button class="btn btn-outline" onclick="loadFromBookingCode()">Load Slip</button>
+        </div>
+        <div id="load-code-alert" style="margin-top:10px;"></div>
+      </div>
       <div class="card" style="margin-bottom:16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
           <div><div style="font-size:12px;color:var(--muted);">Closes</div>
@@ -692,8 +723,9 @@ async function renderPredict(container) {
       </div>
       <div class="alert alert-info" style="margin-bottom:16px;">Pick the games you want to predict. You don't have to predict all — choose <strong>one market per match</strong> for any games you want. You can edit until the week closes.</div>
       <div id="fixtures-predict">${currentFixtures.map(f=>renderFixturePredict(f)).join('')}</div>
-      <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;">
+      <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
         <button class="btn btn-lime" id="submit-slip-btn" onclick="submitSlip()">${mySlip?'💾 Update Slip':'✓ Submit Slip'}</button>
+        <button class="btn btn-outline" id="share-slip-btn" onclick="shareSlip()">📤 Share Slip</button>
       </div>
       <div id="predict-alert" style="margin-top:14px;"></div>`;
   } catch(e){ container.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
@@ -759,6 +791,87 @@ function confirmScore(fId) {
   if(f){ const el=document.getElementById('fp-'+fId); if(el) el.outerHTML=renderFixturePredict(f); }
 }
 
+const BOOKING_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+function generateRandomCode(len){ let s=''; for(let i=0;i<len;i++) s+=BOOKING_CHARS[Math.floor(Math.random()*BOOKING_CHARS.length)]; return s; }
+
+async function generateAndStoreBookingCode() {
+  const selected=currentFixtures.filter(f=>pendingPredictions[f.id]);
+  if(!selected.length) return null;
+  const preds=selected.map(f=>({f:f.id,m:pendingPredictions[f.id].market_type,v:pendingPredictions[f.id].selection_value}));
+  const payload={gw:currentGWId,preds};
+  for(let attempt=0;attempt<5;attempt++){
+    const code=generateRandomCode(6);
+    const { error }=await db.from('shared_slips').insert({booking_code:code,gameweek_id:currentGWId,predictions_json:preds});
+    if(!error) return code;
+    if(error?.code!=='23505') throw error;
+  }
+  return null;
+}
+
+async function shareSlip() {
+  const selected=currentFixtures.filter(f=>pendingPredictions[f.id]);
+  if(!selected.length){ document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">⚠ Make at least one prediction before sharing.</div>`; return; }
+  try {
+    const code=await generateAndStoreBookingCode();
+    if(!code){ document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">Could not generate code. Try again.`; return; }
+    showShareModal(code);
+  } catch(e){ document.getElementById('predict-alert').innerHTML=`<div class="alert alert-error">Failed: ${e.message}`; }
+}
+
+async function shareSlipFromMySlips(slipId) {
+  const slip=mySlipsCache.find(s=>s.id===slipId);
+  if(!slip) return;
+  const preds=slip.predictions||[];
+  if(!preds.length) return;
+  const predsJson=preds.map(p=>({f:p.fixture_id,m:p.market_type,v:p.selection_value}));
+  for(let attempt=0;attempt<5;attempt++){
+    const code=generateRandomCode(6);
+    const { error }=await db.from('shared_slips').insert({booking_code:code,gameweek_id:slip.gameweek_id,predictions_json:predsJson});
+    if(!error){ showShareModal(code); return; }
+    if(error?.code!=='23505'){ alert('Failed: '+error.message); return; }
+  }
+}
+function showShareModal(code) {
+  document.getElementById('share-code-display').textContent=code;
+  document.getElementById('share-modal').style.display='flex';
+}
+
+function copyBookingCode() {
+  const code=document.getElementById('share-code-display').textContent;
+  if(!code||code==='—') return;
+  navigator.clipboard.writeText(code).then(()=>{
+    const btn=document.querySelector('#share-modal .btn-lime');
+    if(btn){ btn.textContent='✓ Copied!'; setTimeout(()=>{ btn.textContent='📋 Copy Code'; },2000); }
+  });
+}
+
+function closeShareModal() { document.getElementById('share-modal').style.display='none'; }
+
+async function loadFromBookingCode() {
+  const input=document.getElementById('load-code-input');
+  const alertEl=document.getElementById('load-code-alert');
+  const raw=(input?.value||'').trim().toUpperCase();
+  if(!raw){ alertEl.innerHTML=`<div class="alert alert-error">Enter a booking code to load.</div>`; return; }
+  if(raw.length!==6){ alertEl.innerHTML=`<div class="alert alert-error">Booking code must be 6 characters (e.g. B227XC).</div>`; return; }
+  alertEl.innerHTML='';
+  try {
+    const { data, error }=await db.from('shared_slips').select('gameweek_id,predictions_json').eq('booking_code',raw).single();
+    if(error||!data){ alertEl.innerHTML=`<div class="alert alert-error">Invalid or expired booking code. Please check and try again.</div>`; return; }
+    const preds=data.predictions_json||[];
+    if(!preds.length){ alertEl.innerHTML=`<div class="alert alert-error">No predictions in this code.</div>`; return; }
+    if(data.gameweek_id!==currentGWId){
+      alertEl.innerHTML=`<div class="alert alert-error">This booking code is for a different game week. Make sure you're viewing the correct week.</div>`; return;
+    }
+    const fixtureIds=new Set(currentFixtures.map(f=>f.id));
+    preds.forEach(p=>{
+      if(fixtureIds.has(p.f)){ pendingPredictions[p.f]={market_type:p.m,selection_value:p.v}; activeMarketTab[p.f]=p.m; }
+    });
+    document.getElementById('fixtures-predict').innerHTML=currentFixtures.map(f=>renderFixturePredict(f)).join('');
+    alertEl.innerHTML=`<div class="alert alert-success">✓ Slip loaded! ${Object.keys(pendingPredictions).length} prediction(s). You can place as-is or make adjustments before submitting.</div>`;
+    input.value='';
+  } catch(e){ alertEl.innerHTML=`<div class="alert alert-error">Failed to load: ${e.message}</div>`; }
+}
+
 async function submitSlip() {
   const selected=currentFixtures.filter(f=>pendingPredictions[f.id]);
   if(!selected.length){
@@ -803,7 +916,8 @@ async function submitSlip() {
 async function renderMySlips(container) {
   try {
     const { data: slips }=await db.from('slips').select('*,gameweeks(*),predictions(*,fixtures(*))').eq('user_id',currentUser.id).order('submitted_at',{ascending:false});
-    if(!slips?.length){ container.innerHTML=`<div class="section-title">My Slips</div><div class="empty-state">No slips yet. Head to Predict to submit your first one!</div>`; return; }
+    mySlipsCache=slips||[];
+    if(!slips?.length){ container.innerHTML=`<div class="section-title">📋 My Slips</div><div class="empty-state">No slips yet. Head to Predict to submit your first one!</div>`; return; }
     container.innerHTML=`<div class="section-title">📋 My Slips</div>`+slips.map(slip=>{
       const gw=slip.gameweeks; if(!gw) return '';
       const scored=gw.status==='scored';
@@ -821,7 +935,10 @@ async function renderMySlips(container) {
           </div>
         </div>
         <div id="slip-body-${slipId}" style="display:none;margin-top:14px;">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Submitted: ${fmtDate(slip.submitted_at)}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <span style="font-size:11px;color:var(--muted);">Submitted: ${fmtDate(slip.submitted_at)}</span>
+            ${gw.status==='open'?`<button class="btn btn-sm btn-outline" onclick="shareSlipFromMySlips('${slipId}');event.stopPropagation();">📤 Share Slip</button>`:''}
+          </div>
           ${preds.map(pred=>{
             const f=pred.fixtures; if(!f) return '';
             let livePoints = pred.points_awarded;
