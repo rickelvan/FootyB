@@ -312,6 +312,8 @@ let currentFixtures = [];
 let mySlipsCache = [];
 let adminTab = 'seasons';
 let predictFocusGWId = null;
+const LB_PAGE_SIZE = 20;
+let lbPageState = { season: 0, weekly: 0 };
 
 // ── UTILS ──────────────────────────────────────────────
 function show(id) { const el=document.getElementById(id); if(el) el.style.display=id==='main-app'?'flex':''; }
@@ -1062,8 +1064,8 @@ async function renderLeaderboard(container) {
     const latestGW=(gws||[]).filter(g=>g.status==='scored').sort((a,b)=>new Date(b.closes_at)-new Date(a.closes_at))[0];
     const weekLB=latestGW?buildLB(allUsers||[],slips||[],[latestGW.id]):[];
     container.innerHTML=`<div class="section-title">🏆 Leaderboards</div>
-      ${lbTable(seasonLB,activeSeason.name+' — Season')}
-      ${latestGW?lbTable(weekLB,latestGW.name+' — Weekly'):''}
+      ${lbTable(seasonLB,activeSeason.name+' — Season','season')}
+      ${latestGW?lbTable(weekLB,latestGW.name+' — Weekly','weekly'):''}
       ${tiebreakCard()}`;
   } catch(e){ container.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
 }
@@ -1074,28 +1076,44 @@ function buildLB(users,slips,gwIds) {
     const total=mySlips.reduce((a,s)=>a+(s.points_total||0),0);
     const allPreds=mySlips.flatMap(s=>s.predictions||[]).filter(p=>p.scored);
     return {userId:u.id,username:u.username,points:total,exactScores:allPreds.filter(p=>p.points_awarded===10).length,correctTotal:allPreds.filter(p=>p.points_awarded>0).length,slips:mySlips.length,earliestSlip:mySlips.reduce((min,s)=>(!min||new Date(s.submitted_at)<new Date(min))?s.submitted_at:min,null)};
-  }).filter(r=>r.slips>0).sort(lbSort);
+  }).sort(lbSort);
 }
 function lbSort(a,b){
   if(b.points!==a.points) return b.points-a.points;
   if(b.exactScores!==a.exactScores) return b.exactScores-a.exactScores;
   if(b.correctTotal!==a.correctTotal) return b.correctTotal-a.correctTotal;
   if(a.earliestSlip&&b.earliestSlip) return new Date(a.earliestSlip)-new Date(b.earliestSlip);
-  return 0;
+  return (a.username||'').localeCompare(b.username||'');
 }
-function lbTable(data,title){
+function lbGoToPage(key,page){
+  lbPageState[key]=Math.max(0,page);
+  renderPage('leaderboard');
+}
+function lbTable(data,title,tableKey){
   if(!data.length) return `<div class="card"><div class="card-title">${title}</div><div class="empty-state" style="padding:20px;">No data yet</div></div>`;
   let rank=1;
   data.forEach((r,i)=>{ if(i>0&&lbSort(data[i-1],r)===0) r.rank=data[i-1].rank; else r.rank=rank; rank++; });
+  const page=Math.max(0,(lbPageState[tableKey]||0));
+  const totalPages=Math.ceil(data.length/LB_PAGE_SIZE);
+  const start=page*LB_PAGE_SIZE;
+  const pageData=data.slice(start,start+LB_PAGE_SIZE);
+  const paginationHtml=totalPages<=1?'':`
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+      <span style="font-size:12px;color:var(--muted);">Showing ${start+1}–${start+pageData.length} of ${data.length}</span>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm btn-outline" onclick="lbGoToPage('${tableKey}',${page-1})" ${page<=0?'disabled':''}>← Prev</button>
+        <button class="btn btn-sm btn-outline" onclick="lbGoToPage('${tableKey}',${page+1})" ${page>=totalPages-1?'disabled':''}>Next →</button>
+      </div>
+    </div>`;
   return `<div class="card"><div class="card-title" style="margin-bottom:14px;">${title}</div>
     <table class="lb-table"><thead><tr><th>#</th><th>Player</th><th style="text-align:right;">Pts</th><th style="text-align:right;">Correct</th><th style="text-align:right;">Scores</th></tr></thead>
-    <tbody>${data.map(r=>`<tr class="${r.userId===currentUser.id?'me':''}">
+    <tbody>${pageData.map(r=>`<tr class="${r.userId===currentUser.id?'me':''}">
       <td><span class="rank-badge ${r.rank<=3?'rank-'+r.rank:''}">${r.rank}</span></td>
       <td>${r.username}${r.userId===currentUser.id?' <span class="badge badge-open" style="font-size:9px;padding:1px 5px;">You</span>':''}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--lime);">${r.points}</td>
       <td style="text-align:right;color:var(--muted);font-size:13px;">${r.correctTotal}</td>
       <td style="text-align:right;color:var(--amber);font-size:13px;">${r.exactScores}</td>
-    </tr>`).join('')}</tbody></table></div>`;
+    </tr>`).join('')}</tbody></table>${paginationHtml}</div>`;
 }
 function tiebreakCard(){
   return `<div class="card" style="margin-top:8px;"><div class="card-title" style="margin-bottom:8px;">Tie-break Rules</div>
