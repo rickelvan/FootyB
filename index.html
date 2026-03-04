@@ -265,6 +265,19 @@
   </div>
 </div>
 
+<!-- WEEKLY COMPETITORS MODAL (admin only) -->
+<div id="weekly-competitors-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-card" style="max-width:420px;">
+    <div class="modal-title">👥 Weekly Competitors</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">Select users to appear on this week's weekly leaderboard. Add before closing the week. Season leaderboard is unchanged.</p>
+    <div id="weekly-competitors-list" style="max-height:280px;overflow-y:auto;margin-bottom:14px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-lime" id="wc-save-btn" onclick="saveWeeklyCompetitors()">Save</button>
+      <button class="btn btn-outline" onclick="closeWeeklyCompetitorsModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- SHARE SLIP MODAL -->
 <div id="share-modal" class="modal-overlay" style="display:none;">
   <div class="modal-card">
@@ -314,6 +327,8 @@ let adminTab = 'seasons';
 let predictFocusGWId = null;
 const LB_PAGE_SIZE = 20;
 let lbPageState = { season: 0, weekly: 0 };
+let selectedWeeklyGWId = null;
+let fixturesFilterGWId = null;
 
 // ── UTILS ──────────────────────────────────────────────
 function show(id) { const el=document.getElementById(id); if(el) el.style.display=id==='main-app'?'flex':''; }
@@ -331,6 +346,11 @@ function fmtDate(dt) {
   if(!dt) return '—';
   try{ return new Date(dt).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
   catch{ return dt; }
+}
+function toUTCISO(localDatetimeStr) {
+  if(!localDatetimeStr) return localDatetimeStr;
+  const d=new Date(localDatetimeStr);
+  return isNaN(d.getTime())?localDatetimeStr:d.toISOString();
 }
 
 function fmtCountdown(closesAt) {
@@ -785,7 +805,7 @@ function setPredictWeek(gwId){
 function renderFixturePredict(f) {
   const mTab=activeMarketTab[f.id]||'1X2';
   const pred=pendingPredictions[f.id]||null;
-  const goalsOpts=['over_0.5','under_0.5','over_1.5','under_1.5','over_2.5','under_2.5','over_3.5','under_3.5','over_4.5','under_4.5'];
+  const goalsOpts=['over_0.5','under_0.5','over_1.5','under_1.5','over_2.5','under_2.5','over_3.5'];
   const [sh,sa]=(pred?.market_type==='SCORE'&&pred?.selection_value)?pred.selection_value.split('-'):['',''];
   return `<div class="fixture-card" id="fp-${f.id}">
     <div class="fixture-teams">
@@ -799,17 +819,17 @@ function renderFixturePredict(f) {
       <button class="market-tab${mTab==='SCORE'?' active':''}" onclick="setMarketTab('${f.id}','SCORE')">Correct Score</button>
     </div>
     ${mTab==='1X2'?`<div class="market-options">
-      ${['home','draw','away'].map(v=>`<button class="mopt${pred?.market_type==='1X2'&&pred?.selection_value===v?' selected':''}" onclick="selectPrediction('${f.id}','1X2','${v}')">${{home:f.home_team,draw:'Draw',away:f.away_team}[v]}</button>`).join('')}
+      ${['home','draw','away'].map(v=>`<button class="mopt${pred?.market_type==='1X2'&&pred?.selection_value===v?' selected':''}" onclick="selectPrediction('${f.id}','1X2','${v}')">${{home:f.home_team,draw:'Draw',away:f.away_team}[v]} <span style="font-size:11px;opacity:.85;">(${getPointsForSelection('1X2',v)} pts)</span></button>`).join('')}
     </div>`:''}
     ${mTab==='GOALS'?`<div class="market-options">
-      ${goalsOpts.map(v=>`<button class="mopt${pred?.market_type==='GOALS'&&pred?.selection_value===v?' selected':''}" onclick="selectPrediction('${f.id}','GOALS','${v}')">${v.replace('over_','Over ').replace('under_','Under ')}</button>`).join('')}
+      ${goalsOpts.map(v=>`<button class="mopt${pred?.market_type==='GOALS'&&pred?.selection_value===v?' selected':''}" onclick="selectPrediction('${f.id}','GOALS','${v}')">${v.replace('over_','Over ').replace('under_','Under ')} <span style="font-size:11px;opacity:.85;">(${getPointsForSelection('GOALS',v)} pts)</span></button>`).join('')}
     </div>`:''}
     ${mTab==='SCORE'?`<div>
       <div class="score-input-row">
         <input type="number" id="sh-${f.id}" min="0" max="20" value="${sh}" placeholder="0">
         <span>—</span>
         <input type="number" id="sa-${f.id}" min="0" max="20" value="${sa}" placeholder="0">
-        <button class="btn btn-sm btn-outline" onclick="confirmScore('${f.id}')">Set Score</button>
+        <button class="btn btn-sm btn-outline" onclick="confirmScore('${f.id}')">Set Score (${getPointsForSelection('SCORE')} pts)</button>
       </div>
       ${pred?.market_type==='SCORE'?`<span style="font-size:12px;color:var(--lime);">✓ Set: ${pred.selection_value}</span>`:''}
     </div>`:''}
@@ -1014,10 +1034,7 @@ async function renderMySlips(container) {
           </div>
           ${preds.map(pred=>{
             const f=pred.fixtures; if(!f) return '';
-            let livePoints = pred.points_awarded;
-            if(scored && f.result_entered) {
-              livePoints = calcPoints(pred, f);
-            }
+            const livePoints = pred.scored ? pred.points_awarded : (scored && f.result_entered ? calcPoints(pred, f) : 0);
             const isCorrect = scored && livePoints > 0;
             const rc=!scored?'pred-pending':isCorrect?'pred-correct':'pred-wrong';
             const pts=!scored?`<span class="pts-pill pts-pending">—</span>`
@@ -1045,27 +1062,54 @@ async function renderMySlips(container) {
 // ══════════════════════════════════════════════════════
 // LEADERBOARD
 // ══════════════════════════════════════════════════════
+function setWeeklyLBWeek(gwId){
+  selectedWeeklyGWId=gwId||null;
+  lbPageState.weekly=0;
+  renderPage('leaderboard');
+}
 async function renderLeaderboard(container) {
   try {
     const { data: seasons }=await db.from('seasons').select('*').eq('is_active',true).limit(1);
     const activeSeason=seasons?.[0];
-    if(!activeSeason){ container.innerHTML=`<div class="alert alert-info">No active season.</div>`; return; }
-    const [{ data: allUsers },{ data: gws }]=await Promise.all([
+    if(!activeSeason){ container.innerHTML=`<div class="section-title">🏆 Leaderboards</div><div class="alert alert-info">No active season.</div>${tiebreakCard()}`; return; }
+    const [{ data: allUsers },{ data: gws },{ data: participants }]=await Promise.all([
       db.from('users').select('id,username').eq('role','user').eq('active',true),
-      db.from('gameweeks').select('*').eq('season_id',activeSeason.id)
+      db.from('gameweeks').select('*').eq('season_id',activeSeason.id),
+      db.from('weekly_leaderboard_participants').select('user_id,gameweek_id')
     ]);
-    const scoredGWIds=(gws||[]).filter(g=>g.status==='scored').map(g=>g.id);
+    const scoredGws=(gws||[]).filter(g=>g.status==='scored').sort((a,b)=>new Date(b.closes_at)-new Date(a.closes_at));
+    const scoredGWIds=scoredGws.map(g=>g.id);
+    const gwParticipantCount=(participants||[]).reduce((acc,p)=>{
+      acc[p.gameweek_id]=(acc[p.gameweek_id]||0)+1;
+      return acc;
+    },{});
+    const scoredGwsWithParticipants=scoredGws.filter(g=>gwParticipantCount[g.id]>0);
     if(!scoredGWIds.length){
       container.innerHTML=`<div class="section-title">🏆 Leaderboards</div><div class="alert alert-info">No scored weeks yet.</div>${tiebreakCard()}`;
       return;
     }
     const { data: slips }=await db.from('slips').select('*,predictions(*)').in('gameweek_id',scoredGWIds);
     const seasonLB=buildLB(allUsers||[],slips||[],scoredGWIds);
-    const latestGW=(gws||[]).filter(g=>g.status==='scored').sort((a,b)=>new Date(b.closes_at)-new Date(a.closes_at))[0];
-    const weekLB=latestGW?buildLB(allUsers||[],slips||[],[latestGW.id]):[];
+    const targetGW=selectedWeeklyGWId&&scoredGwsWithParticipants.some(g=>g.id===selectedWeeklyGWId)
+      ? scoredGwsWithParticipants.find(g=>g.id===selectedWeeklyGWId) || scoredGwsWithParticipants[0]
+      : scoredGwsWithParticipants[0]||null;
+    selectedWeeklyGWId=targetGW?.id||null;
+    const participantIds=new Set((participants||[]).filter(p=>p.gameweek_id===targetGW?.id).map(p=>p.user_id));
+    const weeklyUsers=(allUsers||[]).filter(u=>participantIds.has(u.id));
+    const weekLB=targetGW?buildLB(weeklyUsers,slips||[],[targetGW.id]):[];
+    const weekSelectorHtml=scoredGwsWithParticipants.length>0?`
+      <div style="margin-bottom:12px;">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px;">Select week</label>
+        <select style="max-width:240px;" onchange="setWeeklyLBWeek(this.value||null)">
+          ${scoredGwsWithParticipants.map(g=>`<option value="${g.id}" ${g.id===selectedWeeklyGWId?'selected':''}>${g.name}</option>`).join('')}
+        </select>
+      </div>`:'';
+    const weeklyCardHtml=targetGW
+      ? `${weekSelectorHtml}${lbTable(weekLB,targetGW.name+' — Weekly','weekly')}`
+      : `<div class="card"><div class="card-title">Weekly Leaderboard</div><div class="empty-state" style="padding:20px;">No weekly leaderboard for any week yet. Admin selects competitors per week before closing.</div></div>`;
     container.innerHTML=`<div class="section-title">🏆 Leaderboards</div>
       ${lbTable(seasonLB,activeSeason.name+' — Season','season')}
-      ${latestGW?lbTable(weekLB,latestGW.name+' — Weekly','weekly'):''}
+      ${weeklyCardHtml}
       ${tiebreakCard()}`;
   } catch(e){ container.innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
 }
@@ -1075,7 +1119,7 @@ function buildLB(users,slips,gwIds) {
     const mySlips=slips.filter(s=>s.user_id===u.id&&gwIds.includes(s.gameweek_id));
     const total=mySlips.reduce((a,s)=>a+(s.points_total||0),0);
     const allPreds=mySlips.flatMap(s=>s.predictions||[]).filter(p=>p.scored);
-    return {userId:u.id,username:u.username,points:total,exactScores:allPreds.filter(p=>p.points_awarded===10).length,correctTotal:allPreds.filter(p=>p.points_awarded>0).length,slips:mySlips.length,earliestSlip:mySlips.reduce((min,s)=>(!min||new Date(s.submitted_at)<new Date(min))?s.submitted_at:min,null)};
+    return {userId:u.id,username:u.username,points:total,exactScores:allPreds.filter(p=>p.market_type==='SCORE'&&p.points_awarded>0).length,correctTotal:allPreds.filter(p=>p.points_awarded>0).length,slips:mySlips.length,earliestSlip:mySlips.reduce((min,s)=>(!min||new Date(s.submitted_at)<new Date(min))?s.submitted_at:min,null)};
   }).sort(lbSort);
 }
 function lbSort(a,b){
@@ -1117,7 +1161,7 @@ function lbTable(data,title,tableKey){
 }
 function tiebreakCard(){
   return `<div class="card" style="margin-top:8px;"><div class="card-title" style="margin-bottom:8px;">Tie-break Rules</div>
-    <p style="font-size:13px;color:var(--muted);line-height:1.8;">1. More exact Correct Score hits (10pt picks)<br>2. More total correct predictions<br>3. Earlier slip submission time<br>4. Shown as tied if all equal</p></div>`;
+    <p style="font-size:13px;color:var(--muted);line-height:1.8;">1. More exact Correct Score hits<br>2. More total correct predictions<br>3. Earlier slip submission time<br>4. Shown as tied if all equal</p></div>`;
 }
 
 // ══════════════════════════════════════════════════════
@@ -1215,6 +1259,7 @@ async function aGW(){
         <td><span class="badge badge-${g.status==='open'?'open':g.status==='closed'?'closed':'scored'}">${g.status}</span></td>
         <td style="display:flex;gap:6px;flex-wrap:wrap;">
           ${g.status==='open'?`<button class="btn btn-sm btn-amber" onclick="adminSetGWStatus('${g.id}','closed')">Close Week</button>`:''}
+          ${g.status==='open'?`<button class="btn btn-sm btn-outline" onclick="openWeeklyCompetitorsModal('${g.id}','${(g.name||'').replace(/'/g, "\\'")}')">👥 Weekly Competitors</button>`:''}
           ${g.status==='closed'?`<button class="btn btn-sm btn-outline" onclick="adminSetGWStatus('${g.id}','open')">Reopen</button>`:''}
           <button class="btn btn-sm btn-outline" onclick="adminRenameGW('${g.id}','${g.name.replace(/'/g, "\\'")}')">✏ Rename</button>
           <button class="btn btn-sm btn-danger" onclick="adminDeleteGW('${g.id}')">Delete</button>
@@ -1239,7 +1284,7 @@ async function adminCreateGW(seasonId){
   if(!name||!opens||!closes){ document.getElementById('gw-alert').innerHTML='<div class="alert alert-error">All fields required.</div>'; return; }
   if(new Date(closes)<=new Date(opens)){ document.getElementById('gw-alert').innerHTML='<div class="alert alert-error">Closes must be after opens.</div>'; return; }
   setLoading('cgw-btn',true);
-  const { error }=await db.from('gameweeks').insert({season_id:seasonId,name,opens_at:opens,closes_at:closes,status:'open'});
+  const { error }=await db.from('gameweeks').insert({season_id:seasonId,name,opens_at:toUTCISO(opens),closes_at:toUTCISO(closes),status:'open'});
   setLoading('cgw-btn',false);
   if(error){ document.getElementById('gw-alert').innerHTML=`<div class="alert alert-error">${error.message}</div>`; return; }
   loadAtab('gameweeks');
@@ -1263,7 +1308,44 @@ async function adminDeleteGW(id){
   await db.from('gameweeks').delete().eq('id',id); loadAtab('gameweeks');
 }
 
+let wcModalGWId = null;
+async function openWeeklyCompetitorsModal(gwId, gwName){
+  wcModalGWId = gwId;
+  document.getElementById('weekly-competitors-modal').style.display = 'flex';
+  const listEl = document.getElementById('weekly-competitors-list');
+  listEl.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner"></div></div>';
+  try {
+    const [{ data: users },{ data: participants }] = await Promise.all([
+      db.from('users').select('id,username').eq('role','user').eq('active',true).order('username'),
+      db.from('weekly_leaderboard_participants').select('user_id').eq('gameweek_id',gwId)
+    ]);
+    const selectedIds = new Set((participants||[]).map(p=>p.user_id));
+    listEl.innerHTML = (users||[]).map(u=>`<div class="check-row"><input type="checkbox" id="wc-${u.id}" ${selectedIds.has(u.id)?'checked':''}><label for="wc-${u.id}">${u.username}</label></div>`).join('') || '<div class="empty-state" style="padding:20px;">No users</div>';
+  } catch(e){ listEl.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`; }
+}
+function closeWeeklyCompetitorsModal(){
+  document.getElementById('weekly-competitors-modal').style.display = 'none';
+  wcModalGWId = null;
+}
+async function saveWeeklyCompetitors(){
+  if(!wcModalGWId) return;
+  const users = await db.from('users').select('id').eq('role','user').eq('active',true);
+  const selected = (users||[]).filter(u=>document.getElementById('wc-'+u.id)?.checked);
+  setLoading('wc-save-btn',true);
+  try {
+    await db.from('weekly_leaderboard_participants').delete().eq('gameweek_id',wcModalGWId);
+    if(selected.length) await db.from('weekly_leaderboard_participants').insert(selected.map(u=>({user_id:u.id,gameweek_id:wcModalGWId})));
+    closeWeeklyCompetitorsModal();
+    loadAtab('gameweeks');
+  } catch(e){ alert('Failed: '+e.message); }
+  finally { setLoading('wc-save-btn',false); }
+}
+
 // FIXTURES
+function setFixturesFilterGW(gwId){
+  fixturesFilterGWId=gwId||null;
+  loadAtab('fixtures');
+}
 async function aFixtures(){
   const { data: seasons }=await db.from('seasons').select('*').eq('is_active',true).limit(1);
   const as=seasons?.[0];
@@ -1271,9 +1353,13 @@ async function aFixtures(){
     as?db.from('gameweeks').select('*').eq('season_id',as.id).order('opens_at'):{data:[]},
     as?db.from('fixtures').select('*,gameweeks!inner(season_id,name)').eq('gameweeks.season_id',as.id).order('kickoff_at'):{data:[]}
   ]);
-  const gwMap=Object.fromEntries((gws||[]).map(g=>[g.id,g]));
+  const firstGWId=(gws||[])[0]?.id;
+  if(!fixturesFilterGWId&&firstGWId) fixturesFilterGWId=firstGWId;
+  const selGWId=fixturesFilterGWId||firstGWId;
+  const filteredFx=(fixtures||[]).filter(f=>f.gameweek_id===selGWId);
+  const selGW=gws?.find(g=>g.id===selGWId);
   return `<div class="card"><div class="card-title" style="margin-bottom:14px;">Add Fixture</div>
-    <div class="form-group"><label>Game Week</label><select id="fxgw">${(gws||[]).map(g=>`<option value="${g.id}">${g.name} (${g.status})</option>`).join('')||'<option value="">No weeks</option>'}</select></div>
+    <div class="form-group"><label>Game Week</label><select id="fxgw" onchange="setFixturesFilterGW(this.value)">${(gws||[]).map(g=>`<option value="${g.id}" ${g.id===selGWId?'selected':''}>${g.name} (${g.status})</option>`).join('')||'<option value="">No weeks</option>'}</select></div>
     <div class="form-row">
       <div class="form-group"><label>Home Team</label><input id="fxhome" placeholder="Gor Mahia"></div>
       <div class="form-group"><label>Away Team</label><input id="fxaway" placeholder="Tusker FC"></div>
@@ -1282,16 +1368,17 @@ async function aFixtures(){
     <button class="btn btn-lime" id="cfx-btn" onclick="adminCreateFx()">Add Fixture</button>
     <div id="fx-alert" style="margin-top:10px;"></div>
   </div>
-  <div class="card"><div class="card-title" style="margin-bottom:14px;">All Fixtures</div>
-    <table class="admin-table"><thead><tr><th>Week</th><th>Match</th><th>Kickoff</th><th>Result</th><th></th></tr></thead><tbody>
-      ${(fixtures||[]).map(f=>`<tr>
-        <td style="font-size:11px;color:var(--muted);">${f.gameweeks?.name||'—'}</td>
+  <div class="card"><div class="card-title" style="margin-bottom:14px;">Fixtures — ${selGW?selGW.name:'Select week'}</div>
+    <table class="admin-table"><thead><tr><th>Match</th><th>Kickoff</th><th>Result</th><th></th></tr></thead><tbody>
+      ${filteredFx.map(f=>`<tr>
         <td><strong>${f.home_team}</strong> vs ${f.away_team}</td>
         <td class="mono" style="font-size:11px;">${fmtDate(f.kickoff_at)}</td>
         <td class="score-result">${f.result_entered?`${f.final_home_goals}–${f.final_away_goals}`:'—'}</td>
         <td><button class="btn btn-sm btn-danger" onclick="adminDeleteFx('${f.id}')">✕</button></td>
       </tr>`).join('')}
-    </tbody></table></div>`;
+    </tbody></table>
+    ${!filteredFx.length?`<div class="empty-state" style="padding:20px;">No fixtures for this week yet.</div>`:''}
+  </div>`;
 }
 async function adminCreateFx(){
   const gwId=document.getElementById('fxgw').value;
@@ -1300,7 +1387,7 @@ async function adminCreateFx(){
   const ko=document.getElementById('fxko').value;
   if(!gwId||!home||!away||!ko){ document.getElementById('fx-alert').innerHTML='<div class="alert alert-error">All fields required.</div>'; return; }
   setLoading('cfx-btn',true);
-  const { error }=await db.from('fixtures').insert({gameweek_id:gwId,home_team:home,away_team:away,kickoff_at:ko,result_entered:false});
+  const { error }=await db.from('fixtures').insert({gameweek_id:gwId,home_team:home,away_team:away,kickoff_at:toUTCISO(ko),result_entered:false});
   setLoading('cfx-btn',false);
   if(error){ document.getElementById('fx-alert').innerHTML=`<div class="alert alert-error">${error.message}</div>`; return; }
   loadAtab('fixtures');
@@ -1376,20 +1463,33 @@ async function adminScoreWeek(gwId){
   }catch(e){ document.getElementById('ra-'+gwId).innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
   finally{ setLoading('sw-'+gwId,false); }
 }
+// Revised scoring (for future gameweeks)
+const REVISED_POINTS={
+  '1X2':{home:3,draw:5,away:7},
+  'GOALS':{'over_0.5':2,'over_1.5':4,'over_2.5':6,'over_3.5':8,'under_2.5':9,'under_1.5':11,'under_0.5':13},
+  'SCORE':15
+};
+function getPointsForSelection(marketType,selectionValue){
+  if(marketType==='1X2') return REVISED_POINTS['1X2'][selectionValue]??0;
+  if(marketType==='GOALS') return REVISED_POINTS['GOALS'][selectionValue]??0;
+  if(marketType==='SCORE') return REVISED_POINTS['SCORE'];
+  return 0;
+}
 function calcPoints(pred,fx){
   const hg=parseInt(fx.final_home_goals), ag=parseInt(fx.final_away_goals), total=hg+ag;
   if(pred.market_type==='1X2'){
     const actual=hg>ag?'home':ag>hg?'away':'draw';
-    return pred.selection_value===actual?3:0;
+    return pred.selection_value===actual?REVISED_POINTS['1X2'][actual]:0;
   }
   if(pred.market_type==='GOALS'){
     const[dir,thresh]=pred.selection_value.split('_');
     const t=parseFloat(thresh);
-    return(dir==='over'?total>t:total<t)?3:0;
+    const hit=(dir==='over'?total>t:total<t);
+    return hit?(REVISED_POINTS['GOALS'][pred.selection_value]??3):0;
   }
   if(pred.market_type==='SCORE'){
     const[ph,pa]=pred.selection_value.split('-').map(Number);
-    return ph===hg&&pa===ag?10:0;
+    return ph===hg&&pa===ag?REVISED_POINTS['SCORE']:0;
   }
   return 0;
 }
@@ -1499,7 +1599,7 @@ async function adminAddOverride(){
   try{
     await db.from('slip_edit_overrides').delete().eq('user_id',userId).eq('gameweek_id',gwId);
     const payload={gameweek_id:gwId,user_id:userId,created_by:currentUser.id};
-    if(exp) payload.expires_at=exp;
+    if(exp) payload.expires_at=toUTCISO(exp);
     const { error }=await db.from('slip_edit_overrides').insert(payload);
     if(error) throw error;
     alertEl.innerHTML='<div class="alert alert-success">✓ Override granted. This user can now edit their slip for that closed week.</div>';
