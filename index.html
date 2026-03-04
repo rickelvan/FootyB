@@ -819,17 +819,17 @@ function renderFixturePredict(f) {
       <button class="market-tab${mTab==='SCORE'?' active':''}" onclick="setMarketTab('${f.id}','SCORE')">Correct Score</button>
     </div>
     ${mTab==='1X2'?`<div class="market-options">
-      ${['home','draw','away'].map(v=>`<button class="mopt${pred?.market_type==='1X2'&&pred?.selection_value===v?' selected':''}" onclick="selectPrediction('${f.id}','1X2','${v}')">${{home:f.home_team,draw:'Draw',away:f.away_team}[v]} <span style="font-size:11px;opacity:.85;">(${getPointsForSelection('1X2',v)} pts)</span></button>`).join('')}
+      ${['home','draw','away'].map(v=>`<button class="mopt${pred?.market_type==='1X2'&&pred?.selection_value===v?' selected':''}" onclick="selectPrediction('${f.id}','1X2','${v}')">${{home:f.home_team,draw:'Draw',away:f.away_team}[v]}</button>`).join('')}
     </div>`:''}
     ${mTab==='GOALS'?`<div class="market-options">
-      ${goalsOpts.map(v=>`<button class="mopt${pred?.market_type==='GOALS'&&pred?.selection_value===v?' selected':''}" onclick="selectPrediction('${f.id}','GOALS','${v}')">${v.replace('over_','Over ').replace('under_','Under ')} <span style="font-size:11px;opacity:.85;">(${getPointsForSelection('GOALS',v)} pts)</span></button>`).join('')}
+      ${goalsOpts.map(v=>`<button class="mopt${pred?.market_type==='GOALS'&&pred?.selection_value===v?' selected':''}" onclick="selectPrediction('${f.id}','GOALS','${v}')">${v.replace('over_','Over ').replace('under_','Under ')}</button>`).join('')}
     </div>`:''}
     ${mTab==='SCORE'?`<div>
       <div class="score-input-row">
         <input type="number" id="sh-${f.id}" min="0" max="20" value="${sh}" placeholder="0">
         <span>—</span>
         <input type="number" id="sa-${f.id}" min="0" max="20" value="${sa}" placeholder="0">
-        <button class="btn btn-sm btn-outline" onclick="confirmScore('${f.id}')">Set Score (${getPointsForSelection('SCORE')} pts)</button>
+        <button class="btn btn-sm btn-outline" onclick="confirmScore('${f.id}')">Set Score (10 pts)</button>
       </div>
       ${pred?.market_type==='SCORE'?`<span style="font-size:12px;color:var(--lime);">✓ Set: ${pred.selection_value}</span>`:''}
     </div>`:''}
@@ -1463,33 +1463,20 @@ async function adminScoreWeek(gwId){
   }catch(e){ document.getElementById('ra-'+gwId).innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`; }
   finally{ setLoading('sw-'+gwId,false); }
 }
-// Revised scoring (for future gameweeks)
-const REVISED_POINTS={
-  '1X2':{home:7,draw:5,away:7},
-  'GOALS':{'over_0.5':2,'over_1.5':4,'over_2.5':6,'over_3.5':8,'under_2.5':9,'under_1.5':11,'under_0.5':13},
-  'SCORE':15
-};
-function getPointsForSelection(marketType,selectionValue){
-  if(marketType==='1X2') return REVISED_POINTS['1X2'][selectionValue]??0;
-  if(marketType==='GOALS') return REVISED_POINTS['GOALS'][selectionValue]??0;
-  if(marketType==='SCORE') return REVISED_POINTS['SCORE'];
-  return 0;
-}
 function calcPoints(pred,fx){
   const hg=parseInt(fx.final_home_goals), ag=parseInt(fx.final_away_goals), total=hg+ag;
   if(pred.market_type==='1X2'){
     const actual=hg>ag?'home':ag>hg?'away':'draw';
-    return pred.selection_value===actual?REVISED_POINTS['1X2'][actual]:0;
+    return pred.selection_value===actual?3:0;
   }
   if(pred.market_type==='GOALS'){
     const[dir,thresh]=pred.selection_value.split('_');
     const t=parseFloat(thresh);
-    const hit=(dir==='over'?total>t:total<t);
-    return hit?(REVISED_POINTS['GOALS'][pred.selection_value]??3):0;
+    return(dir==='over'?total>t:total<t)?3:0;
   }
   if(pred.market_type==='SCORE'){
     const[ph,pa]=pred.selection_value.split('-').map(Number);
-    return ph===hg&&pa===ag?REVISED_POINTS['SCORE']:0;
+    return ph===hg&&pa===ag?10:0;
   }
   return 0;
 }
